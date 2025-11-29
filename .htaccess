@@ -1,0 +1,23 @@
+# ============================================================================
+# .htaccess - Sistema de Estacionamiento
+# ============================================================================
+
+# Habilitar motor de reescritura
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /controldepagosestacionamiento/
+
+    # Redirigir todo a public/index.php excepto archivos/directorios existentes
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ public/index.php?url=$1 [QSA,L]
+</IfModule>
+
+# Deshabilitar listado de directorios
+Options -Indexes
+
+# Permitir acceso desde localhost
+Require all granted
+
+# UTF-8 Encoding
+AddDefaultCharset UTF-8
