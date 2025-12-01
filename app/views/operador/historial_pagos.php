@@ -140,23 +140,41 @@ require_once __DIR__ . '/../layouts/header.php';
                                             <?php
                                             $estados = [
                                                 'aprobado' => '<span class="badge bg-success">Aprobado</span>',
-                                                'pendiente' => '<span class="badge bg-warning">Pendiente</span>',
+                                                'pendiente' => '<span class="badge bg-warning">Pendiente de Aprobación</span>',
                                                 'rechazado' => '<span class="badge bg-danger">Rechazado</span>',
-                                                'no_aplica' => '<span class="badge bg-secondary">No Aplica</span>'
+                                                'no_aplica' => '<span class="badge bg-info">Aprobado Automáticamente</span>'
                                             ];
                                             echo $estados[$pago['estado_comprobante']] ?? '<span class="badge bg-secondary">' . htmlspecialchars($pago['estado_comprobante'] ?? 'Desconocido') . '</span>';
                                             ?>
                                         </td>
                                         <td>
                                             <div class="btn-group btn-group-sm">
-                                                <?php if ($pago['comprobante_ruta']): ?>
-                                                    <a href="<?= url($pago['comprobante_ruta']) ?>" target="_blank"
-                                                       class="btn btn-outline-primary" title="Ver comprobante">
-                                                        <i class="bi bi-eye"></i>
+                                                <?php if ($pago['estado_comprobante'] === 'aprobado'): ?>
+                                                    <a href="<?= url('operador/descargar-recibo?id=' . $pago['id']) ?>"
+                                                       class="btn btn-outline-success" title="Descargar Recibo">
+                                                        <i class="bi bi-file-earmark-pdf"></i>
                                                     </a>
                                                 <?php endif; ?>
 
-                                                <?php if ($pago['estado_comprobante'] === 'pendiente'): ?>
+                                                <?php if ($pago['comprobante_ruta']): ?>
+                                                    <?php 
+                                                    $ext = strtolower(pathinfo($pago['comprobante_ruta'], PATHINFO_EXTENSION));
+                                                    if ($ext === 'pdf'): 
+                                                    ?>
+                                                        <a href="<?= url($pago['comprobante_ruta']) ?>" target="_blank"
+                                                           class="btn btn-outline-primary" title="Ver comprobante PDF">
+                                                            <i class="bi bi-file-pdf"></i>
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <button type="button" class="btn btn-outline-primary" 
+                                                                onclick="verComprobante('<?= url($pago['comprobante_ruta']) ?>')"
+                                                                title="Ver comprobante">
+                                                            <i class="bi bi-eye"></i>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+
+                                                <?php if ($pago['estado_comprobante'] === 'pendiente' || $pago['estado_comprobante'] === 'no_aplica'): ?>
                                                     <a href="<?= url('operador/revisar-pago?id=' . $pago['id']) ?>"
                                                        class="btn btn-primary" title="Revisar pago">
                                                         <i class="bi bi-search"></i>
@@ -203,6 +221,29 @@ require_once __DIR__ . '/../layouts/header.php';
     </div>
 </div>
 
+<!-- Modal Previsualización Comprobante -->
+<div class="modal fade" id="modalComprobante" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-image"></i> Comprobante de Pago
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center p-0 bg-light">
+                <img id="imgComprobante" src="" class="img-fluid" style="max-height: 80vh;" alt="Comprobante">
+            </div>
+            <div class="modal-footer">
+                <a id="btnDescargarComprobante" href="#" download class="btn btn-primary">
+                    <i class="bi bi-download"></i> Descargar
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function verDetalles(pagoId) {
     // Mostrar modal con spinner
@@ -231,6 +272,18 @@ function verDetalles(pagoId) {
             <p>Para ver los detalles completos, contacta al administrador del sistema.</p>
         `;
     }, 500);
+}
+
+function verComprobante(url) {
+    const modalElement = document.getElementById('modalComprobante');
+    const modal = new bootstrap.Modal(modalElement);
+    const img = document.getElementById('imgComprobante');
+    const btnDescargar = document.getElementById('btnDescargarComprobante');
+    
+    img.src = url;
+    btnDescargar.href = url;
+    
+    modal.show();
 }
 </script>
 

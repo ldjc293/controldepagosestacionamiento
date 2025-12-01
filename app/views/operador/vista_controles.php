@@ -116,6 +116,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                     <th>Propietario</th>
                                     <th>Apartamento</th>
                                     <th>Fecha Asignación</th>
+                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -204,6 +205,15 @@ require_once __DIR__ . '/../layouts/header.php';
                                                 <span class="text-muted">-</span>
                                             <?php endif; ?>
                                         </td>
+                                        <td>
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-primary btn-cambiar-estado"
+                                                    data-control-id="<?= $control['id'] ?>"
+                                                    data-control-numero="<?= htmlspecialchars($control['numero_control_completo']) ?>"
+                                                    data-control-estado="<?= $control['estado'] ?>">
+                                                <i class="bi bi-arrow-left-right"></i> Cambiar Estado
+                                            </button>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -214,5 +224,136 @@ require_once __DIR__ . '/../layouts/header.php';
         </div>
     </div>
 </div>
+
+<!-- Modal para Cambiar Estado -->
+<div class="modal fade" id="modalCambiarEstado" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cambiar Estado del Control</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formCambiarEstado">
+                    <input type="hidden" id="control_id" name="control_id">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                    
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Control:</strong></label>
+                        <p id="control_numero_display" class="text-primary fw-bold"></p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="estado" class="form-label">Nuevo Estado <span class="text-danger">*</span></label>
+                        <select class="form-select" id="estado" name="estado" required>
+                            <option value="">Seleccione un estado</option>
+                            <option value="activo">Activo</option>
+                            <option value="bloqueado">Bloqueado</option>
+                            <option value="suspendido">Suspendido</option>
+                            <option value="desactivado">Desactivado</option>
+                            <option value="perdido">Perdido</option>
+                            <option value="vacio">Vacío (Desasignar)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="motivo" class="form-label">Motivo <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="motivo" name="motivo" rows="3" required 
+                                  placeholder="Ingrese el motivo del cambio de estado"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarCambio">
+                    <i class="bi bi-check-circle"></i> Confirmar Cambio
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Cambiar estado de control
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = new bootstrap.Modal(document.getElementById('modalCambiarEstado'));
+    let controlActual = {};
+    
+    // Abrir modal al hacer clic en botón
+    document.querySelectorAll('.btn-cambiar-estado').forEach(btn => {
+        btn.addEventListener('click', function() {
+            controlActual = {
+                id: this.dataset.controlId,
+                numero: this.dataset.controlNumero,
+                estadoActual: this.dataset.controlEstado
+            };
+            
+            document.getElementById('control_id').value = controlActual.id;
+            document.getElementById('control_numero_display').textContent = controlActual.numero;
+            document.getElementById('formCambiarEstado').reset();
+            document.getElementById('control_id').value = controlActual.id;
+            
+            modal.show();
+        });
+    });
+    
+    // Confirmar cambio
+    document.getElementById('btnConfirmarCambio').addEventListener('click', function() {
+        const form = document.getElementById('formCambiarEstado');
+        
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        
+        const formData = new FormData(form);
+        const btn = this;
+        const originalText = btn.innerHTML;
+        
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
+        
+        fetch('<?= url("operador/cambiar-estado-control") ?>', {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Mostrar mensaje de éxito
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                alertDiv.innerHTML = `
+                    <i class="bi bi-check-circle"></i> ${data.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('.content-area').insertBefore(alertDiv, document.querySelector('.content-area').firstChild);
+                
+                // Cerrar modal
+                modal.hide();
+                
+                // Recargar página después de 1 segundo
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                // Mostrar mensaje de error
+                alert('Error: ' + data.message);
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al procesar la solicitud');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    });
+});
+</script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

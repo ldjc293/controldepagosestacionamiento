@@ -43,7 +43,7 @@ require_once __DIR__ . '/../layouts/header.php';
                             <option value="">Todos</option>
                             <?php for ($i = 1; $i <= 12; $i++): ?>
                                 <option value="<?= $i ?>" <?= ($_GET['mes'] ?? '') == $i ? 'selected' : '' ?>>
-                                    <?= date('F', mktime(0, 0, 0, $i, 1)) ?>
+                                    <?= getNombreMesEspanol($i) ?>
                                 </option>
                             <?php endfor; ?>
                         </select>
@@ -102,29 +102,51 @@ require_once __DIR__ . '/../layouts/header.php';
                                         <td><?= date('d/m/Y', strtotime($pago->fecha_pago)) ?></td>
                                         <td>
                                             <strong>
-                                                <?= $pago->moneda === 'USD' ? formatUSD($pago->monto) : formatBs($pago->monto) ?>
+                                                <?php 
+                                                $isUsd = strpos($pago->moneda_pago, 'usd') !== false;
+                                                $montoMostrar = $isUsd ? $pago->monto_usd : $pago->monto_bs;
+                                                echo $isUsd ? formatUSD($montoMostrar) : formatBs($montoMostrar);
+                                                ?>
                                             </strong>
                                         </td>
-                                        <td><?= ucfirst($pago->metodo_pago) ?></td>
                                         <td>
-                                            <?php if ($pago->referencia): ?>
+                                            <?php 
+                                            // Formatear método de pago desde moneda_pago (ej. usd_zelle -> USD Zelle)
+                                            $parts = explode('_', $pago->moneda_pago);
+                                            if (count($parts) >= 2) {
+                                                echo strtoupper($parts[0]) . ' ' . ucfirst($parts[1]);
+                                            } else {
+                                                echo ucfirst($pago->moneda_pago);
+                                            }
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <?php if (isset($pago->referencia) && $pago->referencia): ?>
                                                 <code><?= htmlspecialchars($pago->referencia) ?></code>
                                             <?php else: ?>
                                                 <span class="text-muted">-</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if ($pago->estado === 'aprobado'): ?>
+                                            <?php if ($pago->estado_comprobante === 'aprobado'): ?>
                                                 <span class="badge bg-success">
                                                     <i class="bi bi-check-circle"></i> Aprobado
                                                 </span>
-                                            <?php elseif ($pago->estado === 'rechazado'): ?>
+                                            <?php elseif ($pago->estado_comprobante === 'rechazado'): ?>
                                                 <span class="badge bg-danger">
                                                     <i class="bi bi-x-circle"></i> Rechazado
                                                 </span>
-                                            <?php else: ?>
+                                            <?php elseif ($pago->estado_comprobante === 'no_aplica'): ?>
+                                                <span class="badge bg-info">
+                                                    <i class="bi bi-check-circle"></i> Aprobado Automáticamente
+                                                </span>
+                                            <?php elseif ($pago->estado_comprobante === 'pendiente'): ?>
                                                 <span class="badge bg-warning">
-                                                    <i class="bi bi-hourglass-split"></i> Pendiente
+                                                    <i class="bi bi-hourglass-split"></i> Pendiente de Aprobación
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary">
+                                                    <i class="bi bi-question-circle"></i> <?= ucfirst($pago->estado_comprobante) ?>
                                                 </span>
                                             <?php endif; ?>
                                         </td>
@@ -142,7 +164,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                                    title="Ver detalles">
                                                     <i class="bi bi-eye"></i>
                                                 </a>
-                                                <?php if ($pago->estado === 'aprobado' && $pago->numero_recibo): ?>
+                                                <?php if ($pago->estado_comprobante === 'aprobado' && $pago->numero_recibo): ?>
                                                     <a href="<?= url('cliente/descargar-recibo?id=' . $pago->id) ?>"
                                                        class="btn btn-outline-success"
                                                        title="Descargar recibo">
@@ -169,7 +191,7 @@ require_once __DIR__ . '/../layouts/header.php';
                             <div class="border rounded p-3 text-center">
                                 <h6 class="text-muted mb-2">Aprobados</h6>
                                 <h4 class="text-success">
-                                    <?= count(array_filter($pagos, fn($p) => $p->estado === 'aprobado')) ?>
+                                    <?= count(array_filter($pagos, fn($p) => $p->estado_comprobante === 'aprobado' || $p->estado_comprobante === 'no_aplica')) ?>
                                 </h4>
                             </div>
                         </div>
@@ -177,7 +199,7 @@ require_once __DIR__ . '/../layouts/header.php';
                             <div class="border rounded p-3 text-center">
                                 <h6 class="text-muted mb-2">Pendientes</h6>
                                 <h4 class="text-warning">
-                                    <?= count(array_filter($pagos, fn($p) => $p->estado === 'pendiente')) ?>
+                                    <?= count(array_filter($pagos, fn($p) => $p->estado_comprobante === 'pendiente')) ?>
                                 </h4>
                             </div>
                         </div>
@@ -185,7 +207,7 @@ require_once __DIR__ . '/../layouts/header.php';
                             <div class="border rounded p-3 text-center">
                                 <h6 class="text-muted mb-2">Rechazados</h6>
                                 <h4 class="text-danger">
-                                    <?= count(array_filter($pagos, fn($p) => $p->estado === 'rechazado')) ?>
+                                    <?= count(array_filter($pagos, fn($p) => $p->estado_comprobante === 'rechazado')) ?>
                                 </h4>
                             </div>
                         </div>

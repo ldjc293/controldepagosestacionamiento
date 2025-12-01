@@ -71,6 +71,38 @@ require_once __DIR__ . '/../layouts/header.php';
             </div>
         </div>
 
+        <!-- Solicitudes Pendientes -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="stat-card">
+                    <div class="icon" style="background: rgba(168, 85, 247, 0.1); color: #a855f7;">
+                        <i class="bi bi-inbox"></i>
+                    </div>
+                    <?php
+                    $solicitudesPendientes = 0;
+                    try {
+                        $sql = "SELECT COUNT(*) as total FROM solicitudes_cambios WHERE estado = 'pendiente'";
+                        $result = Database::fetchOne($sql);
+                        $solicitudesPendientes = $result ? $result['total'] : 0;
+                    } catch (Exception $e) {
+                        $solicitudesPendientes = 0;
+                    }
+                    ?>
+                    <div class="value"><?= $solicitudesPendientes ?></div>
+                    <div class="label">Solicitudes Pendientes</div>
+                    <?php if ($solicitudesPendientes > 0): ?>
+                        <a href="<?= url('admin/solicitudes') ?>" class="btn btn-warning mt-2">
+                            <i class="bi bi-eye"></i> Revisar Solicitudes
+                        </a>
+                    <?php else: ?>
+                        <div class="change">
+                            Todo al día
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <!-- Gestión Rápida -->
         <div class="row mb-4">
             <div class="col-md-12">

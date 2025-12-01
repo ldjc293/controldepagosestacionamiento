@@ -96,9 +96,19 @@ require_once __DIR__ . '/../layouts/header.php';
                                         </td>
                                         <td>
                                             <?php if ($pago['comprobante_ruta']): ?>
-                                                <a href="<?= url($pago['comprobante_ruta']) ?>" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                    <i class="bi bi-eye"></i> Ver
-                                                </a>
+                                                <?php 
+                                                $ext = strtolower(pathinfo($pago['comprobante_ruta'], PATHINFO_EXTENSION));
+                                                if ($ext === 'pdf'): 
+                                                ?>
+                                                    <a href="<?= url($pago['comprobante_ruta']) ?>" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                        <i class="bi bi-file-pdf"></i> Ver PDF
+                                                    </a>
+                                                <?php else: ?>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                            onclick="verComprobante('<?= url($pago['comprobante_ruta']) ?>')">
+                                                        <i class="bi bi-eye"></i> Ver
+                                                    </button>
+                                                <?php endif; ?>
                                             <?php else: ?>
                                                 <span class="badge bg-secondary">Sin comprobante</span>
                                             <?php endif; ?>
@@ -119,5 +129,42 @@ require_once __DIR__ . '/../layouts/header.php';
         </div>
     </div>
 </div>
+
+<!-- Modal Previsualización Comprobante -->
+<div class="modal fade" id="modalComprobante" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-image"></i> Comprobante de Pago
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center p-0 bg-light">
+                <img id="imgComprobante" src="" class="img-fluid" style="max-height: 80vh;" alt="Comprobante">
+            </div>
+            <div class="modal-footer">
+                <a id="btnDescargarComprobante" href="#" download class="btn btn-primary">
+                    <i class="bi bi-download"></i> Descargar
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function verComprobante(url) {
+    const modalElement = document.getElementById('modalComprobante');
+    const modal = new bootstrap.Modal(modalElement);
+    const img = document.getElementById('imgComprobante');
+    const btnDescargar = document.getElementById('btnDescargarComprobante');
+    
+    img.src = url;
+    btnDescargar.href = url;
+    
+    modal.show();
+}
+</script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

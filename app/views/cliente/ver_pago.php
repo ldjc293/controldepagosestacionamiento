@@ -46,9 +46,17 @@ require_once __DIR__ . '/../layouts/header.php';
                                         <span class="badge bg-danger fs-5">
                                             <i class="bi bi-x-circle"></i> Rechazado
                                         </span>
-                                    <?php else: ?>
+                                    <?php elseif ($pago->estado_comprobante === 'no_aplica'): ?>
+                                        <span class="badge bg-info fs-5">
+                                            <i class="bi bi-check-circle"></i> Aprobado Automáticamente
+                                        </span>
+                                    <?php elseif ($pago->estado_comprobante === 'pendiente'): ?>
                                         <span class="badge bg-warning fs-5">
-                                            <i class="bi bi-hourglass-split"></i> Pendiente
+                                            <i class="bi bi-hourglass-split"></i> Pendiente de Aprobación
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary fs-5">
+                                            <i class="bi bi-question-circle"></i> <?= ucfirst($pago->estado_comprobante) ?>
                                         </span>
                                     <?php endif; ?>
                                 </div>
@@ -118,7 +126,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                 <tbody>
                                     <?php foreach ($mensualidades as $mens): ?>
                                         <tr>
-                                            <td><?= date('F Y', strtotime($mens['mes_correspondiente'])) ?></td>
+                                            <td><?= formatearMesAnio($mens['mes'], $mens['anio']) ?></td>
                                             <td><?= formatUSD($mens['monto_usd']) ?></td>
                                             <td><strong><?= formatUSD($mens['monto_aplicado_usd']) ?></strong></td>
                                             <td>
@@ -130,10 +138,10 @@ require_once __DIR__ . '/../layouts/header.php';
                             </table>
                         </div>
 
-                        <?php if ($pago->estado_comprobante === 'rechazado' && $pago->notas): ?>
+                        <?php if ($pago->estado_comprobante === 'rechazado' && $pago->motivo_rechazo): ?>
                             <div class="alert alert-danger mt-3">
                                 <strong><i class="bi bi-exclamation-triangle"></i> Motivo del Rechazo:</strong>
-                                <p class="mb-0 mt-2"><?= nl2br(htmlspecialchars($pago->notas)) ?></p>
+                                <p class="mb-0 mt-2"><?= nl2br(htmlspecialchars($pago->motivo_rechazo)) ?></p>
                             </div>
                         <?php endif; ?>
 
@@ -190,8 +198,8 @@ require_once __DIR__ . '/../layouts/header.php';
                         </h6>
                     </div>
                     <div class="card-body d-grid gap-2">
-                        <?php if ($pago->estado_comprobante === 'aprobado' && $pago->recibo_ruta): ?>
-                            <a href="<?= url($pago->recibo_ruta) ?>" target="_blank" class="btn btn-success">
+                        <?php if ($pago->estado_comprobante === 'aprobado' && $pago->numero_recibo): ?>
+                            <a href="<?= url('cliente/descargar-recibo?id=' . $pago->id) ?>" class="btn btn-success">
                                 <i class="bi bi-file-pdf"></i> Descargar Recibo
                             </a>
                         <?php endif; ?>
@@ -238,13 +246,25 @@ require_once __DIR__ . '/../layouts/header.php';
                                 <li class="mb-2">
                                     <i class="bi bi-x-circle"></i>
                                     <strong>Rechazado por:</strong><br>
-                                    Operador #<?= $pago->rechazado_por ?>
+                                    Operador #<?= $pago->aprobado_por ?>
                                 </li>
-                            <?php else: ?>
+                            <?php elseif ($pago->estado_comprobante === 'no_aplica'): ?>
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle"></i>
+                                    <strong>Estado:</strong><br>
+                                    Aprobado automáticamente (pago en efectivo)
+                                </li>
+                            <?php elseif ($pago->estado_comprobante === 'pendiente'): ?>
                                 <li class="mb-2">
                                     <i class="bi bi-hourglass-split"></i>
                                     <strong>Estado:</strong><br>
-                                    En espera de revisión
+                                    En espera de aprobación del operador
+                                </li>
+                            <?php else: ?>
+                                <li class="mb-2">
+                                    <i class="bi bi-question-circle"></i>
+                                    <strong>Estado:</strong><br>
+                                    <?= ucfirst($pago->estado_comprobante) ?>
                                 </li>
                             <?php endif; ?>
                         </ul>

@@ -76,29 +76,27 @@ class AdminController
 
         $usuarios = Usuario::getAll($filtros);
 
-        // Obtener controles para cada usuario
+        // Obtener controles y apartamento para cada usuario (todos los roles pueden tener)
         foreach ($usuarios as $user) {
-            if ($user->rol === 'cliente') {
-                // Obtener controles del usuario
-                $sql = "SELECT ce.id, ce.numero_control_completo as numero_control,
-                               ce.estado, ce.fecha_asignacion,
-                               CASE WHEN ce.estado = 'activo' THEN 1 ELSE 0 END as activo
-                        FROM apartamento_usuario au
-                        LEFT JOIN controles_estacionamiento ce ON ce.apartamento_usuario_id = au.id
-                        WHERE au.usuario_id = ? AND au.activo = 1
-                        ORDER BY ce.numero_control_completo";
-                $user->controles = Database::fetchAll($sql, [$user->id]);
+            // Obtener controles del usuario
+            $sql = "SELECT ce.id, ce.numero_control_completo as numero_control,
+                           ce.estado, ce.fecha_asignacion,
+                           CASE WHEN ce.estado = 'activo' THEN 1 ELSE 0 END as activo
+                    FROM apartamento_usuario au
+                    LEFT JOIN controles_estacionamiento ce ON ce.apartamento_usuario_id = au.id
+                    WHERE au.usuario_id = ? AND au.activo = 1
+                    ORDER BY ce.numero_control_completo";
+            $user->controles = Database::fetchAll($sql, [$user->id]);
 
-                // Obtener información del apartamento
-                $sql = "SELECT a.bloque, a.piso, a.numero_apartamento
-                        FROM apartamento_usuario au
-                        JOIN apartamentos a ON a.id = au.apartamento_id
-                        WHERE au.usuario_id = ? AND au.activo = 1
-                        LIMIT 1";
-                $apto = Database::fetchOne($sql, [$user->id]);
-                if ($apto) {
-                    $user->apartamento = "Bloque {$apto['bloque']} - Piso {$apto['piso']} - Apto {$apto['numero_apartamento']}";
-                }
+            // Obtener información del apartamento
+            $sql = "SELECT a.bloque, a.escalera, a.piso, a.numero_apartamento
+                    FROM apartamento_usuario au
+                    JOIN apartamentos a ON a.id = au.apartamento_id
+                    WHERE au.usuario_id = ? AND au.activo = 1
+                    LIMIT 1";
+            $apto = Database::fetchOne($sql, [$user->id]);
+            if ($apto) {
+                $user->apartamento = "{$apto['bloque']}-{$apto['escalera']}-{$apto['piso']}-{$apto['numero_apartamento']}";
             }
         }
 
@@ -235,30 +233,29 @@ class AdminController
             return;
         }
 
-        // Si es un cliente, obtener su apartamento asignado
+        // Obtener apartamento y controles (todos los roles pueden tener)
         $apartamento = null;
         $controles = [];
-        if ($usuario->rol === 'cliente') {
-            $sql = "SELECT a.*, au.cantidad_controles
-                    FROM apartamento_usuario au
-                    JOIN apartamentos a ON a.id = au.apartamento_id
-                    WHERE au.usuario_id = ? AND au.activo = 1
-                    LIMIT 1";
-            $apartamento = Database::fetchOne($sql, [$usuarioId]);
+        
+        $sql = "SELECT a.*, au.cantidad_controles
+                FROM apartamento_usuario au
+                JOIN apartamentos a ON a.id = au.apartamento_id
+                WHERE au.usuario_id = ? AND au.activo = 1
+                LIMIT 1";
+        $apartamento = Database::fetchOne($sql, [$usuarioId]);
 
-            // Obtener controles asignados
-            $sql = "SELECT ce.numero_control_completo, ce.estado, ce.fecha_asignacion
-                    FROM apartamento_usuario au
-                    LEFT JOIN controles_estacionamiento ce ON ce.apartamento_usuario_id = au.id
-                    WHERE au.usuario_id = ? AND au.activo = 1
-                    ORDER BY ce.numero_control_completo";
-            $controles = Database::fetchAll($sql, [$usuarioId]);
+        // Obtener controles asignados
+        $sql = "SELECT ce.numero_control_completo, ce.estado, ce.fecha_asignacion
+                FROM apartamento_usuario au
+                LEFT JOIN controles_estacionamiento ce ON ce.apartamento_usuario_id = au.id
+                WHERE au.usuario_id = ? AND au.activo = 1
+                ORDER BY ce.numero_control_completo";
+        $controles = Database::fetchAll($sql, [$usuarioId]);
 
-            // Filtrar controles válidos (que no sean NULL)
-            $controles = array_filter($controles, function($c) {
-                return !empty($c['numero_control_completo']);
-            });
-        }
+        // Filtrar controles válidos (que no sean NULL)
+        $controles = array_filter($controles, function($c) {
+            return !empty($c['numero_control_completo']);
+        });
 
         require_once __DIR__ . '/../views/admin/usuarios/editar.php';
     }
@@ -396,6 +393,81 @@ class AdminController
     }
 
     /**
+     * Cambiar rol de usuario
+     */
+    public function cambiarRol(): void
+    {
+        $admin = $this->checkAuth();
+        if (!$admin) {
+            echo json_encode(['success' => false, 'message' => 'No autorizado']);
+            exit;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'message' => 'Método no permitido']);
+            exit;
+        }
+
+        // Debug: Log all POST data
+        writeLog("cambiarRol - POST data: " . json_encode($_POST), 'debug');
+        writeLog("cambiarRol - Content-Type: " . ($_SERVER['CONTENT_TYPE'] ?? ''), 'debug');
+
+        // Leer datos JSON desde el body de la petición
+        $postData = $_POST;
+        if (empty($postData) && strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
+            $input = file_get_contents('php://input');
+            writeLog("cambiarRol - Raw JSON input: " . $input, 'debug');
+            $postData = json_decode($input, true);
+            writeLog("cambiarRol - Decoded JSON: " . json_encode($postData), 'debug');
+        }
+
+        // Validar CSRF
+        $csrfToken = $postData['csrf_token'] ?? '';
+        if (!ValidationHelper::validateCSRFToken($csrfToken)) {
+            writeLog("cambiarRol - CSRF validation failed. Token: $csrfToken", 'error');
+            echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido']);
+            exit;
+        }
+
+        $usuarioId = intval($postData['usuario_id'] ?? 0);
+        $nuevoRol = $postData['nuevo_rol'] ?? '';
+
+        writeLog("cambiarRol - usuarioId: $usuarioId, nuevoRol: $nuevoRol", 'debug');
+
+        $usuario = Usuario::findById($usuarioId);
+
+        if (!$usuario) {
+            echo json_encode(['success' => false, 'message' => 'Usuario no encontrado']);
+            exit;
+        }
+
+        // Validar rol
+        $rolesPermitidos = ['cliente', 'operador', 'consultor', 'administrador'];
+        if (!in_array($nuevoRol, $rolesPermitidos)) {
+            writeLog("cambiarRol - Rol inválido: $nuevoRol", 'error');
+            echo json_encode(['success' => false, 'message' => 'Rol inválido']);
+            exit;
+        }
+
+        // No puede cambiar su propio rol
+        if ($usuario->id === $admin->id) {
+            echo json_encode(['success' => false, 'message' => 'No puedes cambiar tu propio rol']);
+            exit;
+        }
+
+        writeLog("cambiarRol - Intentando actualizar usuario ID $usuarioId con rol $nuevoRol", 'debug');
+
+        if ($usuario->update(['rol' => $nuevoRol])) {
+            writeLog("Rol de usuario ID $usuarioId cambiado de {$usuario->rol} a $nuevoRol por admin {$admin->email}", 'info');
+            echo json_encode(['success' => true, 'message' => 'Rol actualizado correctamente']);
+        } else {
+            writeLog("Error al actualizar rol del usuario ID $usuarioId", 'error');
+            echo json_encode(['success' => false, 'message' => 'Error al actualizar el rol']);
+        }
+        exit;
+    }
+
+    /**
      * Resetear contraseña de usuario
      */
     public function resetearPassword(): void
@@ -444,6 +516,72 @@ class AdminController
         writeLog("Password reseteado para usuario ID $usuarioId por admin {$admin->email}", 'info');
 
         redirect('admin/usuarios');
+    }
+
+    /**
+     * Eliminar usuario
+     */
+    public function eliminarUsuario(): void
+    {
+        $admin = $this->checkAuth();
+        if (!$admin) {
+            echo json_encode(['success' => false, 'message' => 'No autorizado']);
+            exit;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'message' => 'Método no permitido']);
+            exit;
+        }
+
+        // Leer datos JSON
+        $postData = $_POST;
+        if (empty($postData) && strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
+            $input = file_get_contents('php://input');
+            $postData = json_decode($input, true);
+        }
+
+        // Validar CSRF
+        $csrfToken = $postData['csrf_token'] ?? '';
+        if (!ValidationHelper::validateCSRFToken($csrfToken)) {
+            echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido']);
+            exit;
+        }
+
+        $usuarioId = intval($postData['usuario_id'] ?? 0);
+        $usuario = Usuario::findById($usuarioId);
+
+        if (!$usuario) {
+            echo json_encode(['success' => false, 'message' => 'Usuario no encontrado']);
+            exit;
+        }
+
+        // No puede eliminarse a sí mismo
+        if ($usuario->id === $admin->id) {
+            echo json_encode(['success' => false, 'message' => 'No puedes eliminar tu propia cuenta']);
+            exit;
+        }
+
+        // Verificar si tiene apartamento asignado (cualquier rol puede tener apartamento)
+        $sql = "SELECT COUNT(*) as total FROM apartamento_usuario WHERE usuario_id = ? AND activo = 1";
+        $result = Database::fetchOne($sql, [$usuarioId]);
+        if ($result['total'] > 0) {
+            echo json_encode(['success' => false, 'message' => 'No se puede eliminar. El usuario tiene un apartamento asignado. Primero debe desasignarlo.']);
+            exit;
+        }
+
+        try {
+            // Eliminar usuario (soft delete)
+            $sql = "DELETE FROM usuarios WHERE id = ?";
+            Database::execute($sql, [$usuarioId]);
+
+            writeLog("Usuario ID $usuarioId ({$usuario->email}) eliminado por admin {$admin->email}", 'info');
+            echo json_encode(['success' => true, 'message' => 'Usuario eliminado correctamente']);
+        } catch (Exception $e) {
+            writeLog("Error al eliminar usuario ID $usuarioId: " . $e->getMessage(), 'error');
+            echo json_encode(['success' => false, 'message' => 'Error al eliminar el usuario']);
+        }
+        exit;
     }
 
     // ==================== GESTIÓN DE APARTAMENTOS ====================
@@ -2164,6 +2302,97 @@ class AdminController
             echo json_encode(['success' => false, 'message' => 'Error al verificar integridad']);
         }
         exit;
+    }
+
+    /**
+     * Gestión de solicitudes de cambios (igual que operadores)
+     */
+    public function solicitudes(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        $solicitudes = $this->getSolicitudesPendientes();
+
+        require_once __DIR__ . '/../views/operador/solicitudes.php';
+    }
+
+    /**
+     * Aprobar/rechazar solicitud (igual que operadores)
+     */
+    public function processSolicitud(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('admin/solicitudes');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('admin/solicitudes');
+            return;
+        }
+
+        $solicitudId = intval($_POST['solicitud_id'] ?? 0);
+        $accion = $_POST['accion'] ?? '';
+        $observaciones = sanitize($_POST['observaciones'] ?? '');
+
+        if (!in_array($accion, ['aprobar', 'rechazar'])) {
+            $_SESSION['error'] = 'Acción inválida';
+            redirect('admin/solicitudes');
+            return;
+        }
+
+        $sql = "UPDATE solicitudes_cambios
+                SET estado = ?,
+                    aprobado_por = ?,
+                    fecha_respuesta = NOW(),
+                    observaciones = ?
+                WHERE id = ? AND estado = 'pendiente'";
+
+        $estado = $accion === 'aprobar' ? 'aprobada' : 'rechazada';
+
+        $result = Database::execute($sql, [$estado, $usuario->id, $observaciones, $solicitudId]);
+
+        if ($result > 0) {
+            $_SESSION['success'] = "Solicitud {$estado} correctamente";
+            writeLog("Solicitud ID $solicitudId {$estado} por admin {$usuario->email}", 'info');
+        } else {
+            $_SESSION['error'] = 'Error al procesar la solicitud';
+        }
+
+        redirect('admin/solicitudes');
+    }
+
+    /**
+     * Obtener solicitudes pendientes (igual que operadores)
+     */
+    private function getSolicitudesPendientes(): array
+    {
+        $sql = "SELECT s.*,
+                        u.nombre_completo as solicitante_nombre,
+                        u.email as solicitante_email,
+                        u.telefono as solicitante_telefono,
+                        a.bloque as apartamento_bloque,
+                        a.escalera as apartamento_escalera,
+                        a.piso as apartamento_piso,
+                        a.numero_apartamento as apartamento_numero,
+                        c.numero_control_completo as control_numero,
+                        c.estado as control_estado,
+                        c.fecha_asignacion as control_fecha_asignacion
+                FROM solicitudes_cambios s
+                JOIN apartamento_usuario au ON au.id = s.apartamento_usuario_id
+                JOIN usuarios u ON u.id = au.usuario_id
+                JOIN apartamentos a ON a.id = au.apartamento_id
+                LEFT JOIN controles_estacionamiento c ON c.id = s.control_id
+                WHERE s.estado = 'pendiente'
+                ORDER BY s.fecha_solicitud DESC";
+
+        return Database::fetchAll($sql);
     }
 
     /**

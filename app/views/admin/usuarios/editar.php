@@ -129,9 +129,9 @@ require_once __DIR__ . '/../../layouts/header.php';
                                     <i class="bi bi-building"></i>
                                     <strong>Apartamento:</strong>
                                     <?php if (is_array($apartamento)): ?>
-                                        Bloque <?= htmlspecialchars($apartamento['bloque'] ?? 'N/A') ?> - Piso <?= htmlspecialchars($apartamento['piso'] ?? 'N/A') ?> - Apto <?= htmlspecialchars($apartamento['numero_apartamento'] ?? 'N/A') ?>
+                                        <?= htmlspecialchars($apartamento['bloque'] ?? 'N/A') ?>-<?= htmlspecialchars($apartamento['escalera'] ?? 'N/A') ?>-<?= htmlspecialchars($apartamento['piso'] ?? 'N/A') ?>-<?= htmlspecialchars($apartamento['numero_apartamento'] ?? 'N/A') ?>
                                     <?php else: ?>
-                                        Bloque <?= htmlspecialchars($apartamento->bloque ?? 'N/A') ?> - Piso <?= htmlspecialchars($apartamento->piso ?? 'N/A') ?> - Apto <?= htmlspecialchars($apartamento->numero_apartamento ?? 'N/A') ?>
+                                        <?= htmlspecialchars($apartamento->bloque ?? 'N/A') ?>-<?= htmlspecialchars($apartamento->escalera ?? 'N/A') ?>-<?= htmlspecialchars($apartamento->piso ?? 'N/A') ?>-<?= htmlspecialchars($apartamento->numero_apartamento ?? 'N/A') ?>
                                     <?php endif; ?>
                                 </div>
                             <?php endif; ?>

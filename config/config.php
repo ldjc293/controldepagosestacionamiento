@@ -9,6 +9,9 @@
 // Cargar autoloader de Composer
 require_once __DIR__ . '/../vendor/autoload.php';
 
+// Cargar helpers
+require_once __DIR__ . '/../app/helpers/DateHelper.php';
+
 use Dotenv\Dotenv;
 
 // Cargar variables de entorno

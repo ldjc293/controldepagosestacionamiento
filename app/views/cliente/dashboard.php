@@ -138,7 +138,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                         <?php foreach ($mensualidadesPendientes as $mensualidad): ?>
     <tr>
         <td>
-            <strong><?= date('F Y', strtotime($mensualidad->mes_correspondiente ?? '')) ?></strong>
+            <strong><?= formatearMesAnio($mensualidad->mes_correspondiente ?? '') ?></strong>
         </td>
         <td><?= formatUSD($mensualidad->monto_usd ?? 0) ?></td>
         <td>
@@ -203,8 +203,12 @@ require_once __DIR__ . '/../layouts/header.php';
                                                         <span class="badge bg-success">Aprobado</span>
                                                     <?php elseif (($pago->estado_comprobante ?? '') === 'rechazado'): ?>
                                                         <span class="badge bg-danger">Rechazado</span>
+                                                    <?php elseif (($pago->estado_comprobante ?? '') === 'no_aplica'): ?>
+                                                        <span class="badge bg-info">Aprobado Automáticamente</span>
+                                                    <?php elseif (($pago->estado_comprobante ?? '') === 'pendiente'): ?>
+                                                        <span class="badge bg-warning">Pendiente de Aprobación</span>
                                                     <?php else: ?>
-                                                        <span class="badge bg-warning">Pendiente</span>
+                                                        <span class="badge bg-secondary"><?= ucfirst($pago->estado_comprobante ?? 'Desconocido') ?></span>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>

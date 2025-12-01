@@ -92,15 +92,19 @@ require_once __DIR__ . '/../layouts/header.php';
                         </div>
                         <div class="card-body">
                             <div class="row">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <small class="text-muted">Bloque</small>
                                     <h5><?= htmlspecialchars($apartamento['bloque']) ?></h5>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
+                                    <small class="text-muted">Escalera</small>
+                                    <h5><?= htmlspecialchars($apartamento['escalera']) ?></h5>
+                                </div>
+                                <div class="col-md-3">
                                     <small class="text-muted">Piso</small>
                                     <h5><?= htmlspecialchars($apartamento['piso']) ?></h5>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <small class="text-muted">Número</small>
                                     <h5><?= htmlspecialchars($apartamento['numero_apartamento']) ?></h5>
                                 </div>

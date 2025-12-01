@@ -121,10 +121,10 @@ class RegistrarPagoPresencial {
         
         if (items.length === 0) return;
         
-        // Ordenar por fecha (usando el atributo data-mes)
+        // Ordenar por fecha (usando el atributo data-mes en formato YYYY-MM)
         items.sort((a, b) => {
-            const fechaA = new Date(a.dataset.mes + ' 1');
-            const fechaB = new Date(b.dataset.mes + ' 1');
+            const fechaA = new Date(a.dataset.mes + '-01');
+            const fechaB = new Date(b.dataset.mes + '-01');
             return fechaA - fechaB;
         });
         
@@ -359,29 +359,36 @@ class RegistrarPagoPresencial {
 
     calcularTotal() {
         const checkboxes = document.querySelectorAll('.mensualidad-checkbox:checked');
-        let total = 0;
+        let totalUSD = 0;
 
         checkboxes.forEach(checkbox => {
             const item = checkbox.closest('.mensualidad-item');
             if (item) {
-                total += parseFloat(item.dataset.monto || 0);
+                totalUSD += parseFloat(item.dataset.monto || 0);
             }
         });
 
-        const totalElement = document.getElementById('totalUSD');
+        const totalBS = totalUSD * this.tasaBCV;
+
+        const totalUSDElement = document.getElementById('totalUSD');
+        const totalBSElement = document.getElementById('totalBS');
         const montoInput = document.getElementById('monto');
 
-        if (totalElement) {
-            totalElement.textContent = this.formatUSD(total);
+        if (totalUSDElement) {
+            totalUSDElement.textContent = this.formatUSD(totalUSD);
+        }
+
+        if (totalBSElement) {
+            totalBSElement.textContent = this.formatBs(totalBS);
         }
 
         const sidebarTotal = document.getElementById('sidebar-total');
         if (sidebarTotal) {
-            sidebarTotal.textContent = this.formatUSD(total);
+            sidebarTotal.textContent = this.formatUSD(totalUSD);
         }
 
         if (montoInput) {
-            montoInput.value = total.toFixed(2);
+            montoInput.value = totalUSD.toFixed(2);
         }
 
         this.actualizarConversion();

@@ -61,12 +61,23 @@ function isActive(string $path): bool {
                     <i class="bi bi-bell"></i>
                     <span>Notificaciones</span>
                     <?php
-                    $sql = "SELECT COUNT(*) as total FROM notificaciones WHERE usuario_id = ? AND leido = FALSE";
-                    $result = Database::fetchOne($sql, [$_SESSION['user_id']]);
-                    if ($result && $result['total'] > 0):
+                    $notifCount = 0;
+                    try {
+                        $sql = "SELECT COUNT(*) as total FROM notificaciones WHERE usuario_id = ? AND leido = FALSE";
+                        $result = Database::fetchOne($sql, [$_SESSION['user_id']]);
+                        $notifCount = $result ? $result['total'] : 0;
+                    } catch (Exception $e) {
+                        error_log("Error al obtener conteo de notificaciones en sidebar: " . $e->getMessage());
+                        $notifCount = 0;
+                    }
+                    if ($notifCount > 0):
                     ?>
-                        <span class="badge bg-danger"><?= $result['total'] ?></span>
+                        <span class="badge bg-danger"><?= $notifCount ?></span>
                     <?php endif; ?>
+                </a>
+                <a href="<?= url('cliente/solicitudes') ?>" class="menu-item <?= isActive('cliente/solicitudes') ? 'active' : '' ?>">
+                    <i class="bi bi-envelope-plus"></i>
+                    <span>Generar Solicitud</span>
                 </a>
             </div>
 
@@ -116,6 +127,13 @@ function isActive(string $path): bool {
                 <a href="<?= url('operador/solicitudes') ?>" class="menu-item <?= isActive('operador/solicitudes') ? 'active' : '' ?>">
                     <i class="bi bi-inbox"></i>
                     <span>Solicitudes</span>
+                    <?php
+                    $sql = "SELECT COUNT(*) as total FROM solicitudes_cambios WHERE estado = 'pendiente'";
+                    $result = Database::fetchOne($sql);
+                    if ($result && $result['total'] > 0):
+                    ?>
+                        <span class="badge bg-info"><?= $result['total'] ?></span>
+                    <?php endif; ?>
                 </a>
             </div>
 
@@ -180,6 +198,17 @@ function isActive(string $path): bool {
                 <a href="<?= url('admin/controles') ?>" class="menu-item <?= isActive('admin/controles') ? 'active' : '' ?>">
                     <i class="bi bi-controller"></i>
                     <span>Controles</span>
+                </a>
+                <a href="<?= url('admin/solicitudes') ?>" class="menu-item <?= isActive('admin/solicitudes') ? 'active' : '' ?>">
+                    <i class="bi bi-inbox"></i>
+                    <span>Solicitudes</span>
+                    <?php
+                    $sql = "SELECT COUNT(*) as total FROM solicitudes_cambios WHERE estado = 'pendiente'";
+                    $result = Database::fetchOne($sql);
+                    if ($result && $result['total'] > 0):
+                    ?>
+                        <span class="badge bg-info"><?= $result['total'] ?></span>
+                    <?php endif; ?>
                 </a>
             </div>
 

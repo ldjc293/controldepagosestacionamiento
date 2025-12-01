@@ -26,6 +26,9 @@ require_once __DIR__ . '/../../layouts/header.php';
                 </a>
             </div>
             <div class="card-body">
+                <!-- Token CSRF oculto para JavaScript -->
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                
                 <!-- Filtros -->
                 <form method="GET" class="row g-3 mb-4">
                     <div class="col-md-3">
@@ -166,7 +169,7 @@ require_once __DIR__ . '/../../layouts/header.php';
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if ($usuario->rol === 'cliente' && isset($usuario->controles)): ?>
+                                            <?php if (isset($usuario->controles)): ?>
                                                 <?php
                                                 // Filtrar controles que no sean NULL
                                                 $controlesValidos = array_filter($usuario->controles, function($c) {
@@ -219,6 +222,11 @@ require_once __DIR__ . '/../../layouts/header.php';
                                                    title="Editar">
                                                     <i class="bi bi-pencil"></i>
                                                 </a>
+                                                <button onclick="cambiarRol(<?= $usuario->id ?>, '<?= $usuario->rol ?>')"
+                                                        class="btn btn-outline-info"
+                                                        title="Cambiar Rol">
+                                                    <i class="bi bi-person-badge"></i>
+                                                </button>
                                                 <?php if ($usuario->activo): ?>
                                                     <button onclick="toggleEstado(<?= $usuario->id ?>, 'desactivar')"
                                                             class="btn btn-outline-danger"
@@ -232,6 +240,11 @@ require_once __DIR__ . '/../../layouts/header.php';
                                                         <i class="bi bi-check-circle"></i>
                                                     </button>
                                                 <?php endif; ?>
+                                                <button onclick="eliminarUsuario(<?= $usuario->id ?>, '<?= htmlspecialchars($usuario->nombre_completo, ENT_QUOTES) ?>')"
+                                                        class="btn btn-outline-danger"
+                                                        title="Eliminar Usuario">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -294,6 +307,138 @@ function toggleEstado(usuarioId, accion) {
                 location.reload();
             } else {
                 alert(data.message || 'Error al cambiar el estado');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al procesar la solicitud');
+        });
+    }
+}
+
+function cambiarRol(usuarioId, rolActual) {
+    const roles = ['cliente', 'operador', 'consultor', 'administrador'];
+    const nombresRoles = {
+        'cliente': 'Cliente',
+        'operador': 'Operador',
+        'consultor': 'Consultor',
+        'administrador': 'Administrador'
+    };
+
+    // Crear opciones para el select
+    let opciones = '';
+    roles.forEach(rol => {
+        const selected = rol === rolActual ? 'selected' : '';
+        opciones += '<option value="' + rol + '" ' + selected + '>' + nombresRoles[rol] + '</option>';
+    });
+
+    const csrfToken = document.querySelector('[name="csrf_token"]').value;
+
+    const modalHtml = '' +
+        '<div class="modal fade" id="modalCambiarRol" tabindex="-1">' +
+            '<div class="modal-dialog">' +
+                '<div class="modal-content">' +
+                    '<div class="modal-header">' +
+                        '<h5 class="modal-title">Cambiar Rol de Usuario</h5>' +
+                        '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+                    '</div>' +
+                    '<div class="modal-body">' +
+                        '<form id="formCambiarRol">' +
+                            '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
+                            '<input type="hidden" name="usuario_id" value="' + usuarioId + '">' +
+                            '<div class="mb-3">' +
+                                '<label class="form-label">Nuevo Rol</label>' +
+                                '<select class="form-select" name="nuevo_rol" required>' +
+                                    opciones +
+                                '</select>' +
+                            '</div>' +
+                        '</form>' +
+                    '</div>' +
+                    '<div class="modal-footer">' +
+                        '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>' +
+                        '<button type="button" class="btn btn-primary" id="btnGuardarRol">Guardar Cambios</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
+    // Agregar modal al DOM
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('modalCambiarRol'));
+    modal.show();
+
+    // Agregar event listener al botón después de crear el modal
+    document.getElementById('btnGuardarRol').addEventListener('click', guardarCambioRol);
+
+    // Limpiar modal cuando se cierre
+    document.getElementById('modalCambiarRol').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+function guardarCambioRol() {
+    console.log('guardarCambioRol called');
+    const form = document.getElementById('formCambiarRol');
+    console.log('Form:', form);
+    const formData = new FormData(form);
+
+    // Convertir FormData a objeto para enviar como JSON
+    const data = {};
+    for (let [key, value] of formData.entries()) {
+        data[key] = value;
+    }
+    console.log('Data to send:', data);
+
+    fetch(URL_BASE + '/admin/cambiar-rol', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Response data:', data);
+        if (data.success) {
+            // Cerrar modal
+            bootstrap.Modal.getInstance(document.getElementById('modalCambiarRol')).hide();
+            // Recargar página
+            location.reload();
+        } else {
+            alert(data.message || 'Error al cambiar el rol');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al procesar la solicitud');
+    });
+}
+
+function eliminarUsuario(usuarioId, nombreUsuario) {
+    if (confirm('¿Está seguro de que desea eliminar al usuario "' + nombreUsuario + '"?\\n\\nEsta acción NO se puede deshacer.')) {
+        const csrfToken = document.querySelector('[name="csrf_token"]').value;
+        
+        fetch(URL_BASE + '/admin/eliminar-usuario', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                csrf_token: csrfToken,
+                usuario_id: usuarioId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.message || 'Error al eliminar el usuario');
             }
         })
         .catch(error => {

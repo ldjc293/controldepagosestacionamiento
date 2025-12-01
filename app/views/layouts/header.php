@@ -436,6 +436,22 @@
             }).format(amount) + ' Bs';
         }
 
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Copiado al portapapeles', 'success');
+            }).catch(err => {
+                console.error('Error al copiar: ', err);
+                showToast('Error al copiar', 'danger');
+            });
+        }
+
+        function formatBs(amount) {
+            return new Intl.NumberFormat('es-VE', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(amount) + ' Bs';
+        }
+
         // Format date
         function formatDate(dateString) {
             const options = { year: 'numeric', month: 'long', day: 'numeric' };

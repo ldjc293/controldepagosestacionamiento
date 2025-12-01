@@ -173,7 +173,7 @@
                                  data-monto="<?= $montoDinamicoUSD ?>"
                                  data-monto-bs="<?= $montoDinamicoBS ?>"
                                  data-tipo="<?= $esFutura ? 'futuro' : 'pendiente' ?>"
-                                 data-mes="<?= date('F Y', strtotime($mensualidad->mes_correspondiente)) ?>"
+                                 data-mes="<?= date('Y-m', strtotime($mensualidad->mes_correspondiente)) ?>"
                                  data-meses-diferencia="<?= $mesesDiff ?>">
 
                                 <!-- Status Badge -->
@@ -205,7 +205,7 @@
                                     <label class="form-check-label w-100" for="mens_<?= $mensualidad->id ?>">
                                         <div class="ms-2">
                                             <div class="fw-bold">
-                                                <?= date('M Y', strtotime($mensualidad->mes_correspondiente)) ?>
+                                                <?= formatearMesAnio($mensualidad->mes_correspondiente) ?>
                                             </div>
                                             <div class="text-primary small">
                                                 $<?= number_format($montoDinamicoUSD, 2) ?>
@@ -230,13 +230,17 @@
             <!-- Summary -->
             <div class="mt-3 p-3 bg-light rounded">
                 <div class="row text-center">
-                    <div class="col-6">
+                    <div class="col-4">
                         <div class="fw-bold text-primary">Mensualidades seleccionadas</div>
                         <div class="h4 mb-0" id="mensualidadesCount">0</div>
                     </div>
-                    <div class="col-6">
-                        <div class="fw-bold text-success">Total a pagar</div>
+                    <div class="col-4">
+                        <div class="fw-bold text-success">Total USD</div>
                         <div class="h4 mb-0 text-success" id="totalUSD">$0.00</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="fw-bold text-info">Total Bs</div>
+                        <div class="h4 mb-0 text-info" id="totalBS">0.00 Bs</div>
                     </div>
                 </div>
             </div>

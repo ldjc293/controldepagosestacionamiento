@@ -622,7 +622,7 @@ class Usuario
                     OR u.nombre_completo LIKE ?
                     OR u.cedula LIKE ?
                     OR a.bloque LIKE ?
-                    OR CONCAT(a.bloque, '-', a.numero_apartamento) LIKE ?
+                    OR CONCAT(a.bloque, '-', a.escalera, '-', a.numero_apartamento) LIKE ?
                 )
                 LIMIT 1";
 
@@ -646,7 +646,7 @@ class Usuario
     public static function buscarClientes(string $criterio, int $limit = 10): array
     {
         $sql = "SELECT DISTINCT u.id, u.nombre_completo, u.email, u.cedula,
-                       CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento
+                       CONCAT(a.bloque, '-', a.escalera, '-', a.numero_apartamento) as apartamento
                 FROM usuarios u
                 LEFT JOIN apartamento_usuario au ON au.usuario_id = u.id AND au.activo = TRUE
                 LEFT JOIN apartamentos a ON a.id = au.apartamento_id
@@ -657,7 +657,7 @@ class Usuario
                     OR u.nombre_completo LIKE ?
                     OR u.cedula LIKE ?
                     OR a.bloque LIKE ?
-                    OR CONCAT(a.bloque, '-', a.numero_apartamento) LIKE ?
+                    OR CONCAT(a.bloque, '-', a.escalera, '-', a.numero_apartamento) LIKE ?
                 )
                 ORDER BY u.nombre_completo
                 LIMIT ?";
@@ -683,7 +683,7 @@ class Usuario
     public static function getClientesConControles(array $filters = []): array
     {
         $sql = "SELECT u.id, u.nombre_completo, u.email, u.cedula, u.activo,
-                       CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento,
+                       CONCAT(a.bloque, '-', a.escalera, '-', a.numero_apartamento) as apartamento,
                        a.bloque,
                        COUNT(c.id) as total_controles,
                        COUNT(CASE WHEN c.estado = 'activo' THEN 1 END) as controles_activos,
@@ -706,7 +706,7 @@ class Usuario
         }
 
         if (isset($filters['busqueda'])) {
-            $sql .= " AND (u.nombre_completo LIKE ? OR u.email LIKE ? OR u.cedula LIKE ? OR CONCAT(a.bloque, '-', a.numero_apartamento) LIKE ?)";
+            $sql .= " AND (u.nombre_completo LIKE ? OR u.email LIKE ? OR u.cedula LIKE ? OR CONCAT(a.bloque, '-', a.escalera, '-', a.numero_apartamento) LIKE ?)";
             $busqueda = "%{$filters['busqueda']}%";
             $params = array_merge($params, [$busqueda, $busqueda, $busqueda, $busqueda]);
         }

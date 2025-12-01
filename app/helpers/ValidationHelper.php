@@ -143,6 +143,38 @@ class ValidationHelper
     }
 
     /**
+     * Validate file upload (wrapper for simpler usage)
+     *
+     * @param array $file File data from $_FILES
+     * @param array $allowedExtensions Allowed file extensions (e.g. ['jpg', 'pdf'])
+     * @param int $maxSize Maximum file size in bytes
+     * @return array ['valid' => bool, 'errors' => array]
+     */
+    public static function validateFile(array $file, array $allowedExtensions, int $maxSize): array
+    {
+        $errors = [];
+        
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Error al subir el archivo';
+            return ['valid' => false, 'errors' => $errors];
+        }
+        
+        if ($file['size'] > $maxSize) {
+            $errors[] = 'El archivo excede el tamaño máximo permitido';
+        }
+        
+        $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($extension, $allowedExtensions)) {
+            $errors[] = 'Tipo de archivo no permitido. Permitidos: ' . implode(', ', $allowedExtensions);
+        }
+        
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors
+        ];
+    }
+
+    /**
      * Validate file upload
      *
      * @param array $file File data from $_FILES

@@ -43,8 +43,8 @@ class ClienteController
         $usuario = $this->checkAuth();
         if (!$usuario) return;
 
-        // Obtener mensualidades pendientes
-        $mensualidadesPendientes = Mensualidad::getPendientesByUsuario($usuario->id);
+        // Obtener mensualidades pendientes (solo vencidas)
+        $mensualidadesPendientes = Mensualidad::getPendientesByUsuario($usuario->id, false);
 
         // Calcular deuda total
         $deudaInfo = Mensualidad::calcularDeudaTotal($usuario->id);
@@ -92,14 +92,24 @@ class ClienteController
         $usuario = $this->checkAuth();
         if (!$usuario) return;
 
-        // Obtener mensualidades pendientes
-        $mensualidadesPendientes = Mensualidad::getPendientesByUsuario($usuario->id);
-
-        if (empty($mensualidadesPendientes)) {
-            $_SESSION['info'] = 'No tienes mensualidades pendientes';
-            redirect('cliente/dashboard');
-            return;
+        // Manejar solicitud para generar mensualidades futuras
+        if (isset($_GET['generar_futuras'])) {
+            $mesesAGenerar = intval($_GET['generar_futuras']);
+            if ($mesesAGenerar > 0 && $mesesAGenerar <= 24) { // Máximo 24 meses
+                try {
+                    $generadas = Mensualidad::generarMensualidadesFuturas($usuario->id, $mesesAGenerar);
+                    $_SESSION['success'] = "Se han generado {$mesesAGenerar} mensualidades futuras para que puedas pagar por adelantado";
+                } catch (Exception $e) {
+                    $_SESSION['error'] = "Error al generar mensualidades futuras: " . $e->getMessage();
+                }
+            }
+            // Redireccionar para limpiar el parámetro
+            header('Location: ' . url('cliente/registrar-pago'));
+            exit;
         }
+
+        // Obtener mensualidades disponibles para pago (vencidas + futuras para pago adelantado)
+        $mensualidadesPendientes = Mensualidad::getMensualidadesParaPagoAdelantado($usuario->id, 12); // Aumentar a 12 meses
 
         // Obtener tasa BCV actual
         $tasaBCV = $this->getTasaBCVActual();
@@ -159,6 +169,15 @@ class ClienteController
             return;
         }
 
+        // Validar que se suba comprobante para métodos que lo requieren
+        $metodosConComprobante = ['transferencia', 'pago_movil', 'zelle'];
+        if (in_array($metodoPago, $metodosConComprobante) && 
+            (!isset($_FILES['comprobante']) || $_FILES['comprobante']['error'] === UPLOAD_ERR_NO_FILE)) {
+            $_SESSION['error'] = 'Debe subir el comprobante de pago para el método seleccionado';
+            redirect('cliente/registrar-pago');
+            return;
+        }
+
         // Validar archivo de comprobante si fue subido
         $rutaComprobante = null;
         if (isset($_FILES['comprobante']) && $_FILES['comprobante']['error'] !== UPLOAD_ERR_NO_FILE) {
@@ -197,19 +216,36 @@ class ClienteController
 
         // Registrar pago
         try {
+            // Determinar moneda_pago basado en moneda y método de pago
+            $monedaPago = $moneda; // 'USD' o 'Bs'
+            if ($moneda === 'Bs') {
+                // Si es Bs, agregar el método de pago
+                if ($metodoPago === 'transferencia') {
+                    $monedaPago = 'bs_transferencia';
+                } elseif ($metodoPago === 'pago_movil') {
+                    $monedaPago = 'bs_pago_movil';
+                } else {
+                    $monedaPago = 'bs_efectivo';
+                }
+            } elseif ($moneda === 'USD') {
+                if ($metodoPago === 'zelle') {
+                    $monedaPago = 'usd_zelle';
+                } else {
+                    $monedaPago = 'usd_efectivo';
+                }
+            }
+            
             $pagoId = Pago::registrar([
                 'apartamento_usuario_id' => $apartamentoUsuarioId,
-                'monto' => $monto,
-                'moneda' => $moneda,
-                'metodo_pago' => $metodoPago,
-                'referencia' => $referencia,
+                'moneda_pago' => $monedaPago,
                 'fecha_pago' => $fechaPago,
                 'comprobante_ruta' => $rutaComprobante,
                 'mensualidades_ids' => $mensualidadesSeleccionadas,
-                'registrado_por' => $usuario->id
+                'registrado_por' => $usuario->id,
+                'estado_comprobante' => 'pendiente' // Siempre pendiente para revisión del operador
             ]);
 
-            writeLog("Pago registrado por cliente {$usuario->email}: ID $pagoId, Monto: $monto $moneda", 'info');
+            writeLog("Pago registrado por cliente {$usuario->email}: ID $pagoId, Moneda: $monedaPago", 'info');
 
             $_SESSION['success'] = 'Pago registrado correctamente. Será revisado por un operador';
             redirect('cliente/historial-pagos');
@@ -258,7 +294,14 @@ class ClienteController
 
         $pago = Pago::findById($pagoId);
 
-        if (!$pago || $pago->usuario_id != $usuario->id) {
+        // Verificar que el pago pertenezca al usuario a través de apartamento_usuario
+        $perteneceAlUsuario = false;
+        if ($pago) {
+            $sql = "SELECT 1 FROM apartamento_usuario WHERE id = ? AND usuario_id = ?";
+            $perteneceAlUsuario = Database::fetchOne($sql, [$pago->apartamento_usuario_id, $usuario->id]);
+        }
+
+        if (!$pago || !$perteneceAlUsuario) {
             $_SESSION['error'] = 'Pago no encontrado';
             redirect('cliente/historial-pagos');
             return;
@@ -287,7 +330,14 @@ class ClienteController
 
         $pago = Pago::findById($pagoId);
 
-        if (!$pago || $pago->usuario_id != $usuario->id) {
+        // Verificar que el pago pertenezca al usuario a través de apartamento_usuario
+        $perteneceAlUsuario = false;
+        if ($pago) {
+            $sql = "SELECT 1 FROM apartamento_usuario WHERE id = ? AND usuario_id = ?";
+            $perteneceAlUsuario = Database::fetchOne($sql, [$pago->apartamento_usuario_id, $usuario->id]);
+        }
+
+        if (!$pago || !$perteneceAlUsuario) {
             $_SESSION['error'] = 'Pago no encontrado';
             redirect('cliente/historial-pagos');
             return;
@@ -351,7 +401,7 @@ class ClienteController
         if (!$usuario) return;
 
         // Obtener información del apartamento
-        $sql = "SELECT a.bloque, a.piso, a.numero_apartamento
+        $sql = "SELECT a.bloque, a.escalera, a.piso, a.numero_apartamento
                 FROM apartamento_usuario au
                 JOIN apartamentos a ON a.id = au.apartamento_id
                 WHERE au.usuario_id = ? AND au.activo = 1
@@ -412,6 +462,127 @@ class ClienteController
 
         $_SESSION['success'] = 'Perfil actualizado correctamente';
         redirect('cliente/perfil');
+    }
+
+    /**
+     * Solicitudes del cliente
+     */
+    public function solicitudes(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        // Obtener controles del usuario para las opciones de solicitud
+        $controles = $this->getControlesUsuario($usuario->id);
+        
+        // Obtener historial de solicitudes
+        $historialSolicitudes = $this->getSolicitudesUsuario($usuario->id);
+
+        require_once __DIR__ . '/../views/cliente/solicitudes.php';
+    }
+
+    /**
+     * Obtener historial de solicitudes del usuario
+     */
+    private function getSolicitudesUsuario($usuarioId): array
+    {
+        $sql = "SELECT s.*, 
+                       c.numero_control_completo as control_numero
+                FROM solicitudes_cambios s
+                JOIN apartamento_usuario au ON au.id = s.apartamento_usuario_id
+                LEFT JOIN controles_estacionamiento c ON c.id = s.control_id
+                WHERE au.usuario_id = ?
+                ORDER BY s.fecha_solicitud DESC";
+        
+        return Database::fetchAll($sql, [$usuarioId]);
+    }
+
+    /**
+     * Procesar solicitud del cliente
+     */
+    public function processSolicitud(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('cliente/solicitudes');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('cliente/solicitudes');
+            return;
+        }
+
+        $tipoSolicitud = $_POST['tipo_solicitud'] ?? '';
+        $descripcion = sanitize($_POST['descripcion'] ?? '');
+        $controlId = intval($_POST['control_id'] ?? 0);
+
+        // Validaciones
+        $tiposPermitidos = ['desincorporar_control', 'reportar_perdido', 'agregar_control', 'comprar_control', 'solicitud_personalizada'];
+        if (empty($tipoSolicitud) || !in_array($tipoSolicitud, $tiposPermitidos)) {
+            $_SESSION['error'] = 'Debe seleccionar un tipo de solicitud válido';
+            redirect('cliente/solicitudes');
+            return;
+        }
+
+        if (empty($descripcion)) {
+            $_SESSION['error'] = 'Debe proporcionar una descripción';
+            redirect('cliente/solicitudes');
+            return;
+        }
+
+        // Validar que el control pertenezca al usuario si se especifica
+        if ($controlId > 0) {
+            $sqlCheck = "SELECT 1 FROM controles_estacionamiento c
+                        JOIN apartamento_usuario au ON au.id = c.apartamento_usuario_id
+                        WHERE c.id = ? AND au.usuario_id = ?";
+            $pertenece = Database::fetchOne($sqlCheck, [$controlId, $usuario->id]);
+            if (!$pertenece) {
+                $_SESSION['error'] = 'El control seleccionado no le pertenece';
+                redirect('cliente/solicitudes');
+                return;
+            }
+        }
+
+        // Obtener apartamento_usuario_id del cliente
+        $sqlApartamento = "SELECT id FROM apartamento_usuario WHERE usuario_id = ? AND activo = TRUE LIMIT 1";
+        $apartamentoData = Database::fetchOne($sqlApartamento, [$usuario->id]);
+        $apartamentoUsuarioId = $apartamentoData['id'] ?? null;
+
+        if (!$apartamentoUsuarioId) {
+            $_SESSION['error'] = 'No se encontró información del apartamento';
+            redirect('cliente/solicitudes');
+            return;
+        }
+
+        // Crear la solicitud
+        try {
+            $sql = "INSERT INTO solicitudes_cambios (
+                        apartamento_usuario_id, tipo_solicitud, cantidad_controles_nueva,
+                        control_id, motivo, estado, fecha_solicitud
+                    ) VALUES (?, ?, NULL, ?, ?, 'pendiente', NOW())";
+
+            $params = [
+                $apartamentoUsuarioId,
+                $tipoSolicitud,
+                $controlId > 0 ? $controlId : null,
+                $descripcion
+            ];
+
+            Database::execute($sql, $params);
+
+            $_SESSION['success'] = 'Solicitud enviada correctamente. Será revisada por un operador.';
+            redirect('cliente/solicitudes');
+
+        } catch (Exception $e) {
+            writeLog("Error al crear solicitud: " . $e->getMessage(), 'error');
+            $_SESSION['error'] = 'Error al enviar la solicitud. Intente nuevamente';
+            redirect('cliente/solicitudes');
+        }
     }
 
     /**
@@ -493,7 +664,13 @@ class ClienteController
         $usuario = $this->checkAuth();
         if (!$usuario) return;
 
-        $notificaciones = $this->getAllNotificaciones($usuario->id);
+        // Filtros
+        $tipo = $_GET['tipo'] ?? null;
+
+        $notificaciones = $this->getAllNotificaciones($usuario->id, $tipo);
+
+        // Obtener todas las notificaciones para calcular conteos de filtros
+        $todasNotificaciones = $this->getAllNotificaciones($usuario->id);
 
         require_once __DIR__ . '/../views/cliente/notificaciones.php';
     }
@@ -501,20 +678,74 @@ class ClienteController
     /**
      * Marcar notificación como leída
      */
-    public function marcarNotificacionLeida(): void
+    public function marcarLeida(): void
     {
         $usuario = $this->checkAuth();
         if (!$usuario) return;
 
-        $notificacionId = intval($_POST['id'] ?? 0);
-
-        if ($notificacionId) {
-            $sql = "UPDATE notificaciones SET leido = TRUE WHERE id = ? AND usuario_id = ?";
-            Database::execute($sql, [$notificacionId, $usuario->id]);
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('cliente/notificaciones');
+            return;
         }
 
-        echo json_encode(['success' => true]);
-        exit;
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('cliente/notificaciones');
+            return;
+        }
+
+        $notificacionId = intval($_POST['notificacion_id'] ?? 0);
+
+        if ($notificacionId) {
+            try {
+                $sql = "UPDATE notificaciones SET leido = TRUE WHERE id = ? AND usuario_id = ?";
+                Database::execute($sql, [$notificacionId, $usuario->id]);
+                $_SESSION['success'] = 'Notificación marcada como leída';
+            } catch (Exception $e) {
+                error_log("Error al marcar notificación como leída: " . $e->getMessage());
+                $_SESSION['error'] = 'Error al marcar la notificación como leída';
+            }
+        }
+
+        redirect('cliente/notificaciones');
+    }
+
+    /**
+     * Marcar todas las notificaciones como leídas
+     */
+    public function marcarTodasLeidas(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('cliente/notificaciones');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('cliente/notificaciones');
+            return;
+        }
+
+        try {
+            $sql = "UPDATE notificaciones SET leido = TRUE WHERE usuario_id = ? AND leido = FALSE";
+            $result = Database::execute($sql, [$usuario->id]);
+
+            if ($result > 0) {
+                $_SESSION['success'] = "Se marcaron {$result} notificaciones como leídas";
+            } else {
+                $_SESSION['info'] = 'No hay notificaciones nuevas para marcar';
+            }
+        } catch (Exception $e) {
+            error_log("Error al marcar todas las notificaciones como leídas: " . $e->getMessage());
+            $_SESSION['error'] = 'Error al marcar las notificaciones como leídas';
+        }
+
+        redirect('cliente/notificaciones');
     }
 
     // ==================== HELPERS ====================
@@ -574,23 +805,57 @@ class ClienteController
      */
     private function getNotificacionesNoLeidas(int $usuarioId): array
     {
-        $sql = "SELECT * FROM notificaciones
-                WHERE usuario_id = ? AND leido = FALSE
-                ORDER BY fecha_creacion DESC
-                LIMIT 5";
+        try {
+            $sql = "SELECT * FROM notificaciones
+                    WHERE usuario_id = ? AND leido = FALSE
+                    ORDER BY fecha_creacion DESC
+                    LIMIT 5";
 
-        return Database::fetchAll($sql, [$usuarioId]);
+            return Database::fetchAll($sql, [$usuarioId]);
+        } catch (Exception $e) {
+            // Si hay error con la tabla, devolver array vacío
+            error_log("Error en getNotificacionesNoLeidas: " . $e->getMessage());
+            return [];
+        }
     }
 
     /**
      * Obtener todas las notificaciones
      */
-    private function getAllNotificaciones(int $usuarioId): array
+    private function getAllNotificaciones(int $usuarioId, ?string $tipo = null): array
     {
-        $sql = "SELECT * FROM notificaciones
-                WHERE usuario_id = ?
-                ORDER BY fecha_creacion DESC";
+        try {
+            $sql = "SELECT * FROM notificaciones WHERE usuario_id = ?";
+            $params = [$usuarioId];
 
-        return Database::fetchAll($sql, [$usuarioId]);
+            if ($tipo) {
+                // Mapear tipos de filtro a tipos de base de datos
+                $tipoMapping = [
+                    'pago' => ['pago_aprobado', 'comprobante_rechazado'],
+                    'mensualidad' => ['mensualidad_generada', 'mensualidad_vencida', 'alerta_3_meses'],
+                    'control' => ['control_asignado', 'control_bloqueado'],
+                    'sistema' => ['sistema', 'bloqueo', 'morosidad', 'bienvenida']
+                ];
+
+                if (isset($tipoMapping[$tipo])) {
+                    $tipos = $tipoMapping[$tipo];
+                    $placeholders = str_repeat('?,', count($tipos) - 1) . '?';
+                    $sql .= " AND tipo IN ($placeholders)";
+                    $params = array_merge($params, $tipos);
+                } else {
+                    // Si no hay mapping específico, buscar por tipo exacto
+                    $sql .= " AND tipo = ?";
+                    $params[] = $tipo;
+                }
+            }
+
+            $sql .= " ORDER BY fecha_creacion DESC";
+
+            return Database::fetchAll($sql, $params);
+        } catch (Exception $e) {
+            // Si hay error con la tabla, devolver array vacío
+            error_log("Error en getAllNotificaciones: " . $e->getMessage());
+            return [];
+        }
     }
 }

@@ -98,6 +98,7 @@ class Mensualidad
                 LEFT JOIN tasa_cambio_bcv t ON t.id = m.tasa_cambio_id
                 WHERE au.usuario_id = ?
                   AND m.estado IN ('pendiente', 'vencido')
+                  AND m.fecha_vencimiento <= CURDATE()
                   AND au.activo = TRUE
                 ORDER BY m.fecha_vencimiento ASC";
 
@@ -377,6 +378,7 @@ class Mensualidad
                 JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
                 WHERE au.usuario_id = ?
                   AND m.estado IN ('pendiente', 'vencido')
+                  AND m.fecha_vencimiento <= CURDATE()
                   AND au.activo = TRUE";
 
         $result = Database::fetchOne($sql, [$usuarioId]);

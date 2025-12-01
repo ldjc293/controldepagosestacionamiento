@@ -48,9 +48,16 @@ $rolesES = [
         <!-- Notificaciones (solo para clientes) -->
         <?php if ($userRole === 'cliente'): ?>
             <?php
-            $sql = "SELECT COUNT(*) as total FROM notificaciones WHERE usuario_id = ? AND leido = FALSE";
-            $result = Database::fetchOne($sql, [$_SESSION['user_id']]);
-            $notificacionesCount = $result ? $result['total'] : 0;
+            $notificacionesCount = 0;
+            try {
+                $sql = "SELECT COUNT(*) as total FROM notificaciones WHERE usuario_id = ? AND leido = FALSE";
+                $result = Database::fetchOne($sql, [$_SESSION['user_id']]);
+                $notificacionesCount = $result ? $result['total'] : 0;
+            } catch (Exception $e) {
+                // Si hay error con la tabla de notificaciones, mostrar 0
+                error_log("Error al obtener conteo de notificaciones: " . $e->getMessage());
+                $notificacionesCount = 0;
+            }
             ?>
             <div class="topbar-icon" onclick="window.location.href='<?= url('cliente/notificaciones') ?>'">
                 <i class="bi bi-bell"></i>

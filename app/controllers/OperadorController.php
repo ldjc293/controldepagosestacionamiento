@@ -198,7 +198,7 @@ class OperadorController
             return;
         }
         
-        if ($pago->estado_comprobante !== 'pendiente') {
+        if ($pago->estado_comprobante !== 'pendiente' && $pago->estado_comprobante !== 'no_aplica') {
              writeLog("Error aprobación: Estado actual es {$pago->estado_comprobante}", 'warning');
              // Si ya está aprobado, redirigir con éxito
              if ($pago->estado_comprobante === 'aprobado') {
@@ -276,7 +276,7 @@ class OperadorController
             return;
         }
         
-        if ($pago->estado_comprobante !== 'pendiente') {
+        if ($pago->estado_comprobante !== 'pendiente' && $pago->estado_comprobante !== 'no_aplica') {
             writeLog("Error rechazo: Estado actual es {$pago->estado_comprobante}", 'warning');
             $_SESSION['error'] = 'Pago no válido para rechazo';
             redirect('operador/pagos-pendientes');
@@ -453,14 +453,42 @@ class OperadorController
             return;
         }
 
+        // Obtener apartamento_usuario_id del cliente
+        $sqlApartamento = "SELECT id FROM apartamento_usuario WHERE usuario_id = ? AND activo = TRUE LIMIT 1";
+        $apartamentoData = Database::fetchOne($sqlApartamento, [$clienteId]);
+        
+        if (!$apartamentoData) {
+            $_SESSION['error'] = 'El cliente no tiene un apartamento asignado';
+            redirect('operador/registrar-pago-presencial');
+            return;
+        }
+        
+        $apartamentoUsuarioId = $apartamentoData['id'];
+        
+        // Determinar moneda_pago basado en moneda y método de pago
+        $monedaPago = $moneda; // 'USD' o 'Bs'
+        if ($moneda === 'Bs') {
+            // Si es Bs, agregar el método de pago
+            if ($metodoPago === 'transferencia') {
+                $monedaPago = 'bs_transferencia';
+            } elseif ($metodoPago === 'pago_movil') {
+                $monedaPago = 'bs_pago_movil';
+            } else {
+                $monedaPago = 'bs_efectivo';
+            }
+        } elseif ($moneda === 'USD') {
+            if ($metodoPago === 'zelle') {
+                $monedaPago = 'usd_zelle';
+            } else {
+                $monedaPago = 'usd_efectivo';
+            }
+        }
+
         // Registrar y aprobar automáticamente (pago presencial)
         try {
             $pagoId = Pago::registrar([
-                'usuario_id' => $clienteId,
-                'monto' => $monto,
-                'moneda' => $moneda,
-                'metodo_pago' => $metodoPago,
-                'referencia' => $referencia,
+                'apartamento_usuario_id' => $apartamentoUsuarioId,
+                'moneda_pago' => $monedaPago,
                 'fecha_pago' => $fechaPago,
                 'mensualidades_ids' => $mensualidadesSeleccionadas,
                 'registrado_por' => $usuario->id // Operador que registra
@@ -470,7 +498,7 @@ class OperadorController
             $pago = Pago::findById($pagoId);
             $pago->aprobar($usuario->id);
 
-            writeLog("Pago presencial registrado por operador {$usuario->email}: ID $pagoId", 'info');
+            writeLog("Pago presencial registrado por operador {$usuario->email}: ID $pagoId, Moneda: $monedaPago", 'info');
 
             $_SESSION['success'] = 'Pago presencial registrado y aprobado correctamente';
             redirect('operador/dashboard');
@@ -686,10 +714,22 @@ class OperadorController
      */
     private function getSolicitudesPendientes(): array
     {
-        $sql = "SELECT s.*, u.nombre_completo as solicitante_nombre
+        $sql = "SELECT s.*, 
+                       u.nombre_completo as solicitante_nombre,
+                       u.email as solicitante_email,
+                       u.telefono as solicitante_telefono,
+                       a.bloque as apartamento_bloque,
+                       a.escalera as apartamento_escalera,
+                       a.piso as apartamento_piso,
+                       a.numero_apartamento as apartamento_numero,
+                       c.numero_control_completo as control_numero,
+                       c.estado as control_estado,
+                       c.fecha_asignacion as control_fecha_asignacion
                 FROM solicitudes_cambios s
                 JOIN apartamento_usuario au ON au.id = s.apartamento_usuario_id
                 JOIN usuarios u ON u.id = au.usuario_id
+                JOIN apartamentos a ON a.id = au.apartamento_id
+                LEFT JOIN controles_estacionamiento c ON c.id = s.control_id
                 WHERE s.estado = 'pendiente'
                 ORDER BY s.fecha_solicitud DESC";
 
@@ -918,5 +958,193 @@ class OperadorController
         $estadisticas = Control::getEstadisticas();
 
         require_once __DIR__ . '/../views/operador/controles.php';
+    }
+
+    /**
+     * Cambiar estado de un control
+     */
+    public function cambiarEstadoControl(): void
+    {
+        $operador = $this->checkAuth();
+        if (!$operador) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => 'Método no permitido'], 405);
+            } else {
+                redirect('operador/vista-controles');
+            }
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $errorMsg = 'Token de seguridad inválido';
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => $errorMsg]);
+            } else {
+                $_SESSION['error'] = $errorMsg;
+                redirect('operador/vista-controles');
+            }
+            return;
+        }
+
+        $controlId = intval($_POST['control_id'] ?? 0);
+        $nuevoEstado = $_POST['estado'] ?? '';
+        $motivo = sanitize($_POST['motivo'] ?? '');
+
+        // Validar estado
+        $estadosPermitidos = ['activo', 'vacio', 'bloqueado', 'suspendido', 'desactivado', 'perdido'];
+        if (!in_array($nuevoEstado, $estadosPermitidos)) {
+            $errorMsg = 'Estado no válido';
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => $errorMsg]);
+            } else {
+                $_SESSION['error'] = $errorMsg;
+                redirect('operador/vista-controles');
+            }
+            return;
+        }
+
+        $control = Control::findById($controlId);
+
+        if (!$control) {
+            $errorMsg = 'Control no encontrado';
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => $errorMsg]);
+            } else {
+                $_SESSION['error'] = $errorMsg;
+                redirect('operador/vista-controles');
+            }
+            return;
+        }
+
+        $success = false;
+        $successMessage = '';
+        $errorMessage = '';
+
+        // Cambiar estado según el tipo
+        if ($nuevoEstado === 'vacio') {
+            // Desasignar control
+            if ($control->desasignar($motivo, $operador->id)) {
+                $success = true;
+                $successMessage = "Control {$control->numero_control_completo} desasignado correctamente";
+            } else {
+                $errorMessage = 'Error al desasignar el control';
+            }
+        } elseif ($nuevoEstado === 'bloqueado') {
+            // Bloquear control
+            if ($control->bloquear($motivo)) {
+                $success = true;
+                $successMessage = "Control {$control->numero_control_completo} bloqueado correctamente";
+            } else {
+                $errorMessage = 'Error al bloquear el control';
+            }
+        } elseif ($nuevoEstado === 'activo' && $control->estado === 'bloqueado') {
+            // Desbloquear control
+            if ($control->desbloquear($operador->id)) {
+                $success = true;
+                $successMessage = "Control {$control->numero_control_completo} desbloqueado correctamente";
+            } else {
+                $errorMessage = 'Error al desbloquear el control';
+            }
+        } else {
+            // Cambiar a otro estado
+            if ($control->cambiarEstado($nuevoEstado, $motivo, $operador->id)) {
+                $success = true;
+                $successMessage = "Estado del control {$control->numero_control_completo} actualizado correctamente";
+            } else {
+                $errorMessage = 'Error al cambiar el estado del control';
+            }
+        }
+
+        writeLog("Operador {$operador->email} cambió estado del control {$control->numero_control_completo} a: $nuevoEstado", 'info');
+
+        // Responder según el tipo de solicitud
+        if ($this->isAjaxRequest()) {
+            if ($success) {
+                $this->jsonResponse([
+                    'success' => true,
+                    'message' => $successMessage,
+                    'nuevo_estado' => $nuevoEstado,
+                    'control_numero' => $control->numero_control_completo
+                ]);
+            } else {
+                $this->jsonResponse(['success' => false, 'message' => $errorMessage]);
+            }
+        } else {
+            if ($success) {
+                $_SESSION['success'] = $successMessage;
+            } else {
+                $_SESSION['error'] = $errorMessage;
+            }
+            redirect('operador/vista-controles');
+        }
+    }
+
+    /**
+     * Descargar recibo de pago (PDF)
+     */
+    public function descargarRecibo(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        $pagoId = intval($_GET['id'] ?? 0);
+
+        if (!$pagoId) {
+            redirect('operador/historial-pagos');
+            return;
+        }
+
+        $pago = Pago::findById($pagoId);
+
+        if (!$pago) {
+            $_SESSION['error'] = 'Pago no encontrado';
+            redirect('operador/historial-pagos');
+            return;
+        }
+
+        if ($pago->estado_comprobante !== 'aprobado') {
+            $_SESSION['error'] = 'Solo se pueden descargar recibos de pagos aprobados';
+            redirect('operador/historial-pagos');
+            return;
+        }
+
+        // Generar PDF
+        $rutaPdf = $pago->generarRecibo();
+
+        if (!$rutaPdf || !file_exists($rutaPdf)) {
+            $_SESSION['error'] = 'Error al generar el recibo';
+            redirect('operador/historial-pagos');
+            return;
+        }
+
+        // Descargar
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . basename($rutaPdf) . '"');
+        header('Content-Length: ' . filesize($rutaPdf));
+        readfile($rutaPdf);
+        exit;
+    }
+
+    /**
+     * Verificar si es una petición AJAX
+     */
+    private function isAjaxRequest(): bool
+    {
+        return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+               strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest';
+    }
+
+    /**
+     * Enviar respuesta JSON
+     */
+    private function jsonResponse(array $data, int $statusCode = 200): void
+    {
+        http_response_code($statusCode);
+        header('Content-Type: application/json');
+        echo json_encode($data);
+        exit;
     }
 }

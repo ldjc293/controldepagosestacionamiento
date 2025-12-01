@@ -108,12 +108,16 @@ class Pago
                         monto_reconexion_usd, notas
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-            // Determinar estado del comprobante basado en el método de pago y si hay comprobante
-            $estadoComprobante = 'no_aplica'; // Por defecto para pagos en efectivo
+            // Determinar estado del comprobante
+            if (isset($data['estado_comprobante'])) {
+                $estadoComprobante = $data['estado_comprobante'];
+            } else {
+                $estadoComprobante = 'no_aplica'; // Por defecto para pagos en efectivo
 
-            // Si es transferencia o pago móvil y tiene comprobante, requiere aprobación
-            if (in_array($data['moneda_pago'], ['bs_transferencia', 'bs_pago_movil', 'usd_zelle']) && !empty($data['comprobante_ruta'])) {
-                $estadoComprobante = 'pendiente';
+                // Si es transferencia o pago móvil y tiene comprobante, requiere aprobación
+                if (in_array($data['moneda_pago'], ['bs_transferencia', 'bs_pago_movil', 'usd_zelle']) && !empty($data['comprobante_ruta'])) {
+                    $estadoComprobante = 'pendiente';
+                }
             }
 
             $params = [
@@ -286,7 +290,7 @@ class Pago
         $sql = "SELECT
                     p.*,
                     u.nombre_completo as cliente_nombre,
-                    CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento,
+                    CONCAT(a.bloque, '-', a.escalera, '-', a.piso, '-', a.numero_apartamento) as apartamento,
                     t.tasa_usd_bs as tasa_cambio,
                     operador.nombre_completo as operador_nombre,
                     GROUP_CONCAT(
@@ -425,8 +429,8 @@ class Pago
     public static function getPendientesAprobar(): array
     {
         $sql = "SELECT p.*,
-                       u.nombre_completo as cliente_nombre,
-                       CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento
+                        u.nombre_completo as cliente_nombre,
+                        CONCAT(a.bloque, '-', a.escalera, '-', a.piso, '-', a.numero_apartamento) as apartamento
                 FROM pagos p
                 JOIN apartamento_usuario au ON au.id = p.apartamento_usuario_id
                 JOIN usuarios u ON u.id = au.usuario_id
@@ -448,8 +452,8 @@ class Pago
     public static function getHistorialByUsuario(int $usuarioId, int $limit = 20): array
     {
         $sql = "SELECT p.*,
-                       CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento,
-                       t.tasa_usd_bs
+                        CONCAT(a.bloque, '-', a.escalera, '-', a.piso, '-', a.numero_apartamento) as apartamento,
+                        t.tasa_usd_bs
                 FROM pagos p
                 JOIN apartamento_usuario au ON au.id = p.apartamento_usuario_id
                 JOIN apartamentos a ON a.id = au.apartamento_id
@@ -610,12 +614,12 @@ class Pago
     public static function getAllConFiltros(array $filtros = []): array
     {
         $sql = "SELECT p.*,
-                       u.nombre_completo as cliente_nombre,
-                       CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento
+                        u.nombre_completo as cliente_nombre,
+                        CONCAT(a.bloque, '-', a.escalera, '-', a.piso, '-', a.numero_apartamento) as apartamento
                 FROM pagos p
                 JOIN apartamento_usuario au ON au.id = p.apartamento_usuario_id
-                JOIN usuarios u ON u.id = au.usuario_id
-                JOIN apartamentos a ON a.id = au.apartamento_id
+                LEFT JOIN usuarios u ON u.id = au.usuario_id
+                LEFT JOIN apartamentos a ON a.id = au.apartamento_id
                 WHERE 1=1";
 
         $params = [];

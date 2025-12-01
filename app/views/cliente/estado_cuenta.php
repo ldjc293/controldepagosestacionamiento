@@ -38,10 +38,8 @@ require_once __DIR__ . '/../layouts/header.php';
                             <?php
                             $totalPagado = 0;
                             foreach ($pagos as $pago) {
-                                if ($pago->estado === 'aprobado') {
-                                    if ($pago->moneda === 'USD') {
-                                        $totalPagado += $pago->monto;
-                                    }
+                                if ($pago->estado_comprobante === 'aprobado') {
+                                    $totalPagado += $pago->monto_usd;
                                 }
                             }
                             ?>
@@ -103,7 +101,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                     <?php foreach ($mensualidades as $mensualidad): ?>
                                         <tr data-estado="<?= $mensualidad['estado'] ?>">
                                             <td>
-                                                <strong><?= date('F Y', mktime(0, 0, 0, $mensualidad['mes'], 1, $mensualidad['anio'])) ?></strong>
+                                                <strong><?= formatearMesAnio($mensualidad['mes'], $mensualidad['anio']) ?></strong>
                                             </td>
                                             <td><?= formatUSD($mensualidad['monto_usd']) ?></td>
                                             <td>
@@ -116,9 +114,19 @@ require_once __DIR__ . '/../layouts/header.php';
                                                         <i class="bi bi-exclamation-triangle"></i> Vencida
                                                     </span>
                                                 <?php else: ?>
-                                                    <span class="badge bg-warning">
-                                                        <i class="bi bi-clock"></i> Pendiente
-                                                    </span>
+                                                    <?php 
+                                                    $fechaVencimiento = strtotime($mensualidad['fecha_vencimiento']);
+                                                    $esFutura = $fechaVencimiento > time();
+                                                    ?>
+                                                    <?php if ($esFutura): ?>
+                                                        <span class="badge bg-info">
+                                                            <i class="bi bi-calendar"></i> Próximo
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-warning">
+                                                            <i class="bi bi-clock"></i> Pendiente
+                                                        </span>
+                                                    <?php endif; ?>
                                                 <?php endif; ?>
                                             </td>
                                             <td><?= date('d/m/Y', strtotime($mensualidad['fecha_generacion'])) ?></td>
@@ -159,7 +167,11 @@ require_once __DIR__ . '/../layouts/header.php';
                                     <div class="d-flex justify-content-between align-items-start mb-2">
                                         <div>
                                             <strong>
-                                                <?= $pago->moneda === 'USD' ? formatUSD($pago->monto) : formatBs($pago->monto) ?>
+                                                <?php 
+                                                $isUsd = strpos($pago->moneda_pago, 'usd') !== false;
+                                                $montoMostrar = $isUsd ? $pago->monto_usd : $pago->monto_bs;
+                                                echo $isUsd ? formatUSD($montoMostrar) : formatBs($montoMostrar);
+                                                ?>
                                             </strong>
                                             <br>
                                             <small class="text-muted">
@@ -167,29 +179,33 @@ require_once __DIR__ . '/../layouts/header.php';
                                             </small>
                                         </div>
                                         <div>
-                                            <?php if ($pago->estado === 'aprobado'): ?>
+                                            <?php if ($pago->estado_comprobante === 'aprobado'): ?>
                                                 <span class="badge bg-success">Aprobado</span>
-                                            <?php elseif ($pago->estado === 'rechazado'): ?>
+                                            <?php elseif ($pago->estado_comprobante === 'rechazado'): ?>
                                                 <span class="badge bg-danger">Rechazado</span>
+                                            <?php elseif ($pago->estado_comprobante === 'no_aplica'): ?>
+                                                <span class="badge bg-info">Aprobado Automáticamente</span>
+                                            <?php elseif ($pago->estado_comprobante === 'pendiente'): ?>
+                                                <span class="badge bg-warning">Pendiente de Aprobación</span>
                                             <?php else: ?>
-                                                <span class="badge bg-warning">Pendiente</span>
+                                                <span class="badge bg-secondary"><?= ucfirst($pago->estado_comprobante) ?></span>
                                             <?php endif; ?>
                                         </div>
                                     </div>
 
                                     <div class="mb-2">
                                         <small class="text-muted">Método:</small>
-                                        <strong><?= ucfirst($pago->metodo_pago) ?></strong>
+                                        <strong><?= ucfirst($pago->moneda_pago ?? '') ?></strong>
                                     </div>
 
-                                    <?php if ($pago->referencia): ?>
+                                    <?php if (!empty($pago->referencia ?? null)): ?>
                                         <div class="mb-2">
                                             <small class="text-muted">Referencia:</small>
-                                            <code><?= htmlspecialchars($pago->referencia) ?></code>
+                                            <code><?= htmlspecialchars($pago->referencia ?? '') ?></code>
                                         </div>
                                     <?php endif; ?>
 
-                                    <?php if ($pago->estado === 'rechazado' && $pago->motivo_rechazo): ?>
+                                    <?php if ($pago->estado_comprobante === 'rechazado' && $pago->motivo_rechazo): ?>
                                         <div class="alert alert-danger alert-sm mb-2">
                                             <small><strong>Motivo rechazo:</strong> <?= htmlspecialchars($pago->motivo_rechazo) ?></small>
                                         </div>
@@ -199,7 +215,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                         <a href="<?= url('cliente/ver-pago?id=' . $pago->id) ?>" class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-eye"></i> Ver
                                         </a>
-                                        <?php if ($pago->estado === 'aprobado' && $pago->numero_recibo): ?>
+                                        <?php if ($pago->estado_comprobante === 'aprobado' && $pago->numero_recibo): ?>
                                             <a href="<?= url('cliente/descargar-recibo?id=' . $pago->id) ?>" class="btn btn-sm btn-outline-success">
                                                 <i class="bi bi-download"></i> Recibo
                                             </a>
