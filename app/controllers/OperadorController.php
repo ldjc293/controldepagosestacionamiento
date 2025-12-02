@@ -1147,4 +1147,171 @@ class OperadorController
         echo json_encode($data);
         exit;
     }
+
+    // ==================== GESTIÓN DE PERFIL ====================
+
+    /**
+     * Ver perfil del operador
+     */
+    public function perfil(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        // Obtener información del apartamento (si tiene)
+        $sql = "SELECT a.id as apartamento_id, a.bloque, a.escalera, a.piso, a.numero_apartamento
+                FROM apartamento_usuario au
+                JOIN apartamentos a ON a.id = au.apartamento_id
+                WHERE au.usuario_id = ? AND au.activo = 1
+                LIMIT 1";
+        $apartamento = Database::fetchOne($sql, [$usuario->id]);
+
+        // Obtener controles asignados (si tiene)
+        $sql = "SELECT ce.numero_control_completo, ce.estado, ce.fecha_asignacion
+                FROM apartamento_usuario au
+                LEFT JOIN controles_estacionamiento ce ON ce.apartamento_usuario_id = au.id
+                WHERE au.usuario_id = ? AND au.activo = 1
+                ORDER BY ce.numero_control_completo";
+        $controles = Database::fetchAll($sql, [$usuario->id]);
+
+        // Filtrar controles válidos (que no sean NULL)
+        $controles = array_filter($controles, function($c) {
+            return !empty($c['numero_control_completo']);
+        });
+
+        // Obtener todos los apartamentos disponibles para el selector
+        $sql = "SELECT id, bloque, escalera, piso, numero_apartamento
+                FROM apartamentos
+                WHERE activo = 1
+                ORDER BY bloque, escalera, piso, numero_apartamento";
+        $apartamentosDisponibles = Database::fetchAll($sql);
+
+        require_once __DIR__ . '/../views/operador/perfil.php';
+    }
+
+    /**
+     * Actualizar perfil del operador
+     */
+    public function updatePerfil(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('operador/perfil');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('operador/perfil');
+            return;
+        }
+
+        $nombreCompleto = sanitize($_POST['nombre_completo'] ?? '');
+        $email = sanitize($_POST['email'] ?? '');
+        $telefono = sanitize($_POST['telefono'] ?? '');
+        $direccion = sanitize($_POST['direccion'] ?? '');
+        $apartamentoId = intval($_POST['apartamento_id'] ?? 0);
+
+        // Validar nombre completo
+        if (empty($nombreCompleto) || strlen($nombreCompleto) < 3) {
+            $_SESSION['error'] = 'El nombre completo debe tener al menos 3 caracteres';
+            redirect('operador/perfil');
+            return;
+        }
+
+        // Validar email
+        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['error'] = 'Formato de email inválido';
+            redirect('operador/perfil');
+            return;
+        }
+
+        // Verificar si el email ya está en uso por otro usuario
+        if ($email !== $usuario->email) {
+            $existingUser = Usuario::findByEmail($email);
+            if ($existingUser && $existingUser->id !== $usuario->id) {
+                $_SESSION['error'] = 'El email ya está en uso por otro usuario';
+                redirect('operador/perfil');
+                return;
+            }
+        }
+
+        // Validar teléfono
+        if (!empty($telefono) && !ValidationHelper::validatePhone($telefono)) {
+            $_SESSION['error'] = 'Formato de teléfono inválido';
+            redirect('operador/perfil');
+            return;
+        }
+
+        try {
+            // Actualizar datos personales
+            $usuario->update([
+                'nombre_completo' => $nombreCompleto,
+                'email' => $email,
+                'telefono' => $telefono,
+                'direccion' => $direccion
+            ]);
+
+            // Actualizar sesión si cambió el email o nombre
+            if ($email !== $_SESSION['user_email']) {
+                $_SESSION['user_email'] = $email;
+            }
+
+            if ($nombreCompleto !== $_SESSION['user_nombre']) {
+                $_SESSION['user_nombre'] = $nombreCompleto;
+            }
+
+            // Manejar cambio de apartamento
+            // Obtener apartamento actual
+            $sql = "SELECT id, apartamento_id FROM apartamento_usuario
+                    WHERE usuario_id = ? AND activo = 1 LIMIT 1";
+            $asignacionActual = Database::fetchOne($sql, [$usuario->id]);
+
+            if ($apartamentoId > 0) {
+                // Usuario quiere tener un apartamento asignado
+                if ($asignacionActual) {
+                    // Ya tiene un apartamento, verificar si cambió
+                    if ($asignacionActual['apartamento_id'] != $apartamentoId) {
+                        // Desactivar asignación anterior
+                        $sql = "UPDATE apartamento_usuario SET activo = 0 WHERE id = ?";
+                        Database::execute($sql, [$asignacionActual['id']]);
+
+                        // Crear nueva asignación
+                        $sql = "INSERT INTO apartamento_usuario (usuario_id, apartamento_id, activo, fecha_asignacion)
+                                VALUES (?, ?, 1, NOW())";
+                        Database::execute($sql, [$usuario->id, $apartamentoId]);
+
+                        writeLog("Apartamento cambiado para usuario {$usuario->email} (ID: {$usuario->id})", 'info');
+                    }
+                } else {
+                    // No tiene apartamento, crear nueva asignación
+                    $sql = "INSERT INTO apartamento_usuario (usuario_id, apartamento_id, activo, fecha_asignacion)
+                            VALUES (?, ?, 1, NOW())";
+                    Database::execute($sql, [$usuario->id, $apartamentoId]);
+
+                    writeLog("Apartamento asignado a usuario {$usuario->email} (ID: {$usuario->id})", 'info');
+                }
+            } else {
+                // Usuario no quiere apartamento asignado
+                if ($asignacionActual) {
+                    // Desactivar asignación actual
+                    $sql = "UPDATE apartamento_usuario SET activo = 0 WHERE id = ?";
+                    Database::execute($sql, [$asignacionActual['id']]);
+
+                    writeLog("Apartamento desasignado de usuario {$usuario->email} (ID: {$usuario->id})", 'info');
+                }
+            }
+
+            $_SESSION['success'] = 'Perfil actualizado correctamente';
+
+        } catch (Exception $e) {
+            writeLog("Error al actualizar perfil de operador: " . $e->getMessage(), 'error');
+            $_SESSION['error'] = 'Error al actualizar el perfil. Intente nuevamente.';
+        }
+
+        redirect('operador/perfil');
+    }
 }

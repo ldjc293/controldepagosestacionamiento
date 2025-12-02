@@ -185,23 +185,57 @@ class ValidationHelper
     public static function validateFileUpload(array $file, array $allowedTypes, int $maxSize): array
     {
         $errors = [];
-        
+
         if ($file['error'] !== UPLOAD_ERR_OK) {
             $errors[] = 'Error al subir el archivo';
             return ['valid' => false, 'errors' => $errors];
         }
-        
+
         if ($file['size'] > $maxSize) {
             $errors[] = 'El archivo excede el tamaño máximo permitido';
         }
-        
+
         if (!in_array($file['type'], $allowedTypes)) {
             $errors[] = 'Tipo de archivo no permitido';
         }
-        
+
         return [
             'valid' => empty($errors),
             'errors' => $errors
         ];
+    }
+
+    /**
+     * Validate phone number format
+     *
+     * @param string $phone Phone number to validate
+     * @return bool True if phone is valid, false otherwise
+     */
+    public static function validatePhone(string $phone): bool
+    {
+        // Remove all non-digit characters for validation
+        $cleaned = preg_replace('/\D/', '', $phone);
+
+        // Venezuelan phone number patterns:
+        // - 0412/0414/0416/0424/0426 + 7 digits (10 digits total)
+        // - 0212 + 7 digits (local Caracas)
+        // - International format: +58 + 10 digits
+
+        // Check for international format first
+        if (preg_match('/^\+58\d{10}$/', $phone)) {
+            return true;
+        }
+
+        // Check for local format (10 digits starting with 04 or 0212)
+        if (preg_match('/^(0412|0414|0416|0424|0426|0212)\d{7}$/', $cleaned)) {
+            return true;
+        }
+
+        // Check for 10-digit format without prefix
+        if (preg_match('/^\d{10}$/', $cleaned)) {
+            return true;
+        }
+
+        return false;
     }
 }

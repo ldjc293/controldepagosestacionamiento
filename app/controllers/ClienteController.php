@@ -444,8 +444,16 @@ class ClienteController
             return;
         }
 
+        $nombreCompleto = sanitize($_POST['nombre_completo'] ?? '');
         $telefono = sanitize($_POST['telefono'] ?? '');
         $direccion = sanitize($_POST['direccion'] ?? '');
+
+        // Validar nombre completo
+        if (empty($nombreCompleto) || strlen($nombreCompleto) < 3) {
+            $_SESSION['error'] = 'El nombre completo debe tener al menos 3 caracteres';
+            redirect('cliente/perfil');
+            return;
+        }
 
         // Validar teléfono
         if (!empty($telefono) && !ValidationHelper::validatePhone($telefono)) {
@@ -456,9 +464,15 @@ class ClienteController
 
         // Actualizar
         $usuario->update([
+            'nombre_completo' => $nombreCompleto,
             'telefono' => $telefono,
             'direccion' => $direccion
         ]);
+
+        // Actualizar sesión si cambió el nombre
+        if ($nombreCompleto !== $_SESSION['user_nombre']) {
+            $_SESSION['user_nombre'] = $nombreCompleto;
+        }
 
         $_SESSION['success'] = 'Perfil actualizado correctamente';
         redirect('cliente/perfil');

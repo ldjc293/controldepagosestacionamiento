@@ -104,6 +104,39 @@ $rolesES = [
                             <i class="bi bi-key"></i> Cambiar Contraseña
                         </a>
                     </li>
+                <?php elseif ($userRole === 'operador'): ?>
+                    <li>
+                        <a class="dropdown-item" href="<?= url('operador/perfil') ?>">
+                            <i class="bi bi-person"></i> Mi Perfil
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="<?= url('operador/cambiar-password') ?>">
+                            <i class="bi bi-key"></i> Cambiar Contraseña
+                        </a>
+                    </li>
+                <?php elseif ($userRole === 'consultor'): ?>
+                    <li>
+                        <a class="dropdown-item" href="<?= url('consultor/perfil') ?>">
+                            <i class="bi bi-person"></i> Mi Perfil
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="<?= url('consultor/cambiar-password') ?>">
+                            <i class="bi bi-key"></i> Cambiar Contraseña
+                        </a>
+                    </li>
+                <?php elseif ($userRole === 'administrador'): ?>
+                    <li>
+                        <a class="dropdown-item" href="<?= url('admin/perfil') ?>">
+                            <i class="bi bi-person"></i> Mi Perfil
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="<?= url('admin/cambiar-password') ?>">
+                            <i class="bi bi-key"></i> Cambiar Contraseña
+                        </a>
+                    </li>
                 <?php endif; ?>
                 <li><hr class="dropdown-divider"></li>
                 <li>
