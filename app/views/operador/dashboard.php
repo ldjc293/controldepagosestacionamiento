@@ -133,7 +133,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                                 <td><?= date('d/m/Y', strtotime($pago['fecha_pago'])) ?></td>
                                                 <td>
                                                     <strong>
-                                                        <?php if ($pago['moneda_pago'] === 'usd_efectivo' || $pago['moneda_pago'] === 'usd_zelle'): ?>
+                                                        <?php if ($pago['moneda_pago'] === 'usd_efectivo'): ?>
                                                             <?= formatUSD($pago['monto_usd']) ?>
                                                         <?php else: ?>
                                                             <?= formatBs($pago['monto_bs']) ?>

@@ -487,4 +487,259 @@ class AuthController
 
         Database::execute($sql, [$email, PASSWORD_RESET_MAX_ATTEMPTS]);
     }
+
+    // ============================================================================
+    // MÉTODOS DE REGISTRO DE NUEVOS USUARIOS
+    // ============================================================================
+
+    /**
+     * Alias para registroTradicional (para compatibilidad con rutas)
+     */
+    public function registro(): void
+    {
+        $this->registroTradicional();
+    }
+
+    /**
+     * Mostrar formulario de registro tradicional
+     */
+    public function registroTradicional(): void
+    {
+        // Si ya está autenticado, redirigir
+        if (isset($_SESSION['user_id'])) {
+            $rol = $_SESSION['user_rol'] ?? 'cliente';
+            $dashboardRol = $rol === 'administrador' ? 'admin' : $rol;
+            redirect("$dashboardRol/dashboard");
+        }
+
+        // Solo cargar bloques - escaleras y pisos se cargan dinámicamente
+        $bloques = $this->getBloquesDisponibles();
+        $escaleras = []; // Vacío - se carga dinámicamente
+        $pisos = []; // Vacío - se carga dinámicamente
+
+        require_once __DIR__ . '/../views/auth/registro_tradicional.php';
+    }
+
+    /**
+     * Alias para processRegistroTradicional (para compatibilidad con rutas)
+     */
+    public function processRegistro(): void
+    {
+        $this->processRegistroTradicional();
+    }
+
+    /**
+     * Procesar solicitud de registro tradicional
+     */
+    public function processRegistroTradicional(): void
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('auth/registro');
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('auth/registro');
+        }
+
+        // Validar datos del formulario
+        $errores = $this->validarDatosRegistro($_POST);
+
+        if (!empty($errores)) {
+            $_SESSION['error'] = implode('<br>', $errores);
+            $_SESSION['form_data'] = $_POST;
+            redirect('auth/registro');
+        }
+
+        // Verificar que el email no esté registrado
+        if (Usuario::findByEmail($_POST['email'])) {
+            $_SESSION['error'] = 'El email ya está registrado en el sistema';
+            $_SESSION['form_data'] = $_POST;
+            redirect('auth/registro');
+        }
+
+        // Crear solicitud de registro
+        $this->crearSolicitudRegistro($_POST);
+
+        // Limpiar datos del formulario
+        unset($_SESSION['form_data']);
+
+        $_SESSION['success'] = '¡Solicitud de registro enviada exitosamente! Será revisada por un administrador en las próximas 24-48 horas. Te notificaremos por email cuando sea aprobada.';
+        redirect('auth/login');
+    }
+
+    /**
+     * Validar datos del formulario de registro
+     *
+     * @param array $data Datos del formulario
+     * @return array Lista de errores (vacío si todo es válido)
+     */
+    private function validarDatosRegistro(array $data): array
+    {
+        $errores = [];
+
+        // Nombre
+        if (empty(trim($data['nombre'] ?? ''))) {
+            $errores[] = 'El nombre es obligatorio';
+        }
+
+        // Apellido
+        if (empty(trim($data['apellido'] ?? ''))) {
+            $errores[] = 'El apellido es obligatorio';
+        }
+
+        // Email
+        if (empty(trim($data['email'] ?? ''))) {
+            $errores[] = 'El email es obligatorio';
+        } elseif (!ValidationHelper::validateEmail($data['email'])) {
+            $errores[] = 'Formato de email inválido';
+        }
+
+        // Teléfono
+        if (empty(trim($data['telefono'] ?? ''))) {
+            $errores[] = 'El teléfono es obligatorio';
+        } elseif (!ValidationHelper::validatePhone($data['telefono'])) {
+            $errores[] = 'Formato de teléfono inválido (Ej: 04141234567)';
+        }
+
+        // Contraseña
+        if (empty($data['password'] ?? '')) {
+            $errores[] = 'La contraseña es obligatoria';
+        } else {
+            $validacion = ValidationHelper::validatePassword($data['password']);
+            if (!$validacion['valid']) {
+                $errores = array_merge($errores, $validacion['errors']);
+            }
+        }
+
+        // Confirmar contraseña
+        if (($data['password'] ?? '') !== ($data['password_confirm'] ?? '')) {
+            $errores[] = 'Las contraseñas no coinciden';
+        }
+
+        // Apartamento
+        if (empty($data['bloque'] ?? '')) {
+            $errores[] = 'Debe seleccionar un bloque';
+        }
+
+        if (empty($data['escalera'] ?? '')) {
+            $errores[] = 'Debe seleccionar una escalera';
+        }
+
+        if (!isset($data['piso']) || $data['piso'] === '') {
+            $errores[] = 'Debe seleccionar un piso';
+        }
+
+        if (empty($data['apartamento'] ?? '')) {
+            $errores[] = 'Debe seleccionar un apartamento';
+        }
+
+        // Verificar que la combinación bloque-escalera-piso-apartamento existe
+        if (!empty($data['bloque']) && !empty($data['escalera']) && isset($data['piso']) && $data['piso'] !== '' && !empty($data['apartamento'])) {
+            if (!$this->verificarApartamentoExiste($data['bloque'], $data['escalera'], $data['piso'], $data['apartamento'])) {
+                $errores[] = 'La combinación de apartamento seleccionada no existe';
+            }
+        }
+
+        // Cantidad de controles (sin límite según requerimiento)
+        $controles = (int)($data['cantidad_controles'] ?? 0);
+        if ($controles < 1) {
+            $errores[] = 'Debe indicar al menos 1 control';
+        }
+
+        return $errores;
+    }
+
+    /**
+     * Crear solicitud de registro
+     *
+     * @param array $formData Datos del formulario
+     */
+    private function crearSolicitudRegistro(array $formData): void
+    {
+        require_once __DIR__ . '/../models/SolicitudCambio.php';
+
+        $datosUsuario = [
+            'nombre_completo' => trim($formData['nombre'] . ' ' . $formData['apellido']),
+            'email' => trim($formData['email']),
+            'password' => password_hash($formData['password'], PASSWORD_BCRYPT),
+            'telefono' => trim($formData['telefono']),
+            'bloque' => $formData['bloque'],
+            'escalera' => $formData['escalera'],
+            'piso' => $formData['piso'],
+            'apartamento' => $formData['apartamento'],
+            'cantidad_controles' => (int)$formData['cantidad_controles'],
+            'comentarios' => trim($formData['comentarios'] ?? '')
+        ];
+
+        SolicitudCambio::create([
+            'tipo_solicitud' => 'registro_nuevo_usuario',
+            'datos_nuevo_usuario' => $datosUsuario,
+            'motivo' => 'Solicitud de registro de nuevo usuario: ' . $datosUsuario['nombre_completo'],
+            'estado' => 'pendiente'
+        ]);
+
+        writeLog("Nueva solicitud de registro creada: {$datosUsuario['email']}", 'info');
+    }
+
+    /**
+     * Verificar que un apartamento existe
+     *
+     * @param string $bloque Bloque
+     * @param string $escalera Escalera
+     * @param string $piso Piso
+     * @param string $apartamento Número de apartamento
+     * @return bool
+     */
+    private function verificarApartamentoExiste(string $bloque, string $escalera, string $piso, string $apartamento): bool
+    {
+        $sql = "SELECT COUNT(*) as total FROM apartamentos
+                WHERE bloque = ? AND escalera = ? AND piso = ? AND numero_apartamento = ?";
+
+        $result = Database::fetchOne($sql, [$bloque, $escalera, $piso, $apartamento]);
+        return ($result['total'] ?? 0) > 0;
+    }
+
+    /**
+     * Obtener bloques disponibles
+     *
+     * @return array
+     */
+    private function getBloquesDisponibles(): array
+    {
+        $sql = "SELECT DISTINCT bloque FROM apartamentos ORDER BY bloque";
+        $results = Database::fetchAll($sql);
+        return array_column($results, 'bloque');
+    }
+
+    /**
+     * Obtener escaleras disponibles
+     *
+     * @param string|null $bloque Filtrar por bloque (opcional)
+     * @return array
+     */
+    private function getEscalerasDisponibles(?string $bloque = null): array
+    {
+        if ($bloque) {
+            $sql = "SELECT DISTINCT escalera FROM apartamentos WHERE bloque = ? ORDER BY escalera";
+            $results = Database::fetchAll($sql, [$bloque]);
+        } else {
+            $sql = "SELECT DISTINCT escalera FROM apartamentos ORDER BY escalera";
+            $results = Database::fetchAll($sql);
+        }
+        return array_column($results, 'escalera');
+    }
+
+    /**
+     * Obtener pisos disponibles
+     *
+     * @return array
+     */
+    private function getPisosDisponibles(): array
+    {
+        $sql = "SELECT DISTINCT piso FROM apartamentos ORDER BY piso";
+        $results = Database::fetchAll($sql);
+        return array_column($results, 'piso');
+    }
 }

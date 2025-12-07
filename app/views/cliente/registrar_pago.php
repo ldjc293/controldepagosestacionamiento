@@ -42,17 +42,21 @@ require_once __DIR__ . '/../layouts/header.php';
 
                                 <!-- Monthly Payments Selection -->
                                 <div class="mb-4">
-                                    <div class="d-flex justify-content-between align-items-center mb-3">
-                                        <h5 class="mb-0">
+                                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3 gap-2">
+                                        <h5 class="mb-0 mb-md-0">
                                             <i class="bi bi-list-check text-primary me-2"></i>
                                             Seleccionar Mensualidades
                                         </h5>
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            <button type="button" class="btn btn-outline-primary" id="seleccionar-todos" onclick="seleccionarTodos()">
-                                                <i class="bi bi-check-all me-1"></i>Seleccionar Todos
+                                        <div class="btn-group btn-group-sm w-100 w-md-auto" role="group">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" id="seleccionar-todos" onclick="seleccionarTodos()">
+                                                <i class="bi bi-check-all me-1 d-none d-sm-inline"></i>
+                                                <span class="d-inline d-sm-none">Todos</span>
+                                                <span class="d-none d-sm-inline">Seleccionar Todos</span>
                                             </button>
-                                            <button type="button" class="btn btn-outline-secondary" id="deseleccionar-todos" onclick="deseleccionarTodos()">
-                                                <i class="bi bi-x-square me-1"></i>Deseleccionar
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="deseleccionar-todos" onclick="deseleccionarTodos()">
+                                                <i class="bi bi-x-square me-1 d-none d-sm-inline"></i>
+                                                <span class="d-inline d-sm-none">Ninguno</span>
+                                                <span class="d-none d-sm-inline">Deseleccionar</span>
                                             </button>
                                         </div>
                                     </div>
@@ -108,7 +112,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                         <div class="card bg-light border-0 mb-3">
                                             <div class="card-body py-3">
                                                 <small class="text-muted mb-2 d-block fw-bold">Selección rápida:</small>
-                                                <div class="row g-1">
+                                                <div class="d-flex flex-wrap gap-1">
                                                     <?php
                                                     $contadores = ['pendientes' => 0, 'futuras' => 0];
 
@@ -124,26 +128,26 @@ require_once __DIR__ . '/../layouts/header.php';
                                                     ?>
 
                                                     <?php if ($contadores['pendientes'] > 0): ?>
-                                                    <div class="col-auto">
-                                                        <button type="button" class="btn btn-outline-warning btn-sm" id="seleccionar-pendientes" onclick="seleccionarPorTipo('pendiente')">
-                                                            <i class="bi bi-exclamation-triangle me-1"></i>Pendientes (<?= $contadores['pendientes'] ?>)
-                                                        </button>
-                                                    </div>
+                                                    <button type="button" class="btn btn-outline-warning btn-sm flex-fill flex-md-auto" id="seleccionar-pendientes" onclick="seleccionarPorTipo('pendiente')">
+                                                        <i class="bi bi-exclamation-triangle me-1"></i>
+                                                        <span class="d-inline d-md-none">Vencidas</span>
+                                                        <span class="d-none d-md-inline">Pendientes (<?= $contadores['pendientes'] ?>)</span>
+                                                    </button>
                                                     <?php endif; ?>
 
                                                     <?php if ($contadores['futuras'] > 0): ?>
-                                                    <div class="col-auto">
-                                                        <button type="button" class="btn btn-info btn-sm" id="seleccionar-futuros" onclick="seleccionarPorTipo('futuro')">
-                                                            <i class="bi bi-calendar-plus me-1"></i>Futuras (<?= $contadores['futuras'] ?>)
-                                                        </button>
-                                                    </div>
+                                                    <button type="button" class="btn btn-info btn-sm flex-fill flex-md-auto" id="seleccionar-futuros" onclick="seleccionarPorTipo('futuro')">
+                                                        <i class="bi bi-calendar-plus me-1"></i>
+                                                        <span class="d-inline d-md-none">Futuras</span>
+                                                        <span class="d-none d-md-inline">Futuras (<?= $contadores['futuras'] ?>)</span>
+                                                    </button>
                                                     <?php endif; ?>
 
-                                                    <div class="col-auto">
-                                                        <button type="button" class="btn btn-success btn-sm" id="seleccionar-3-meses" onclick="seleccionarSiguientesMeses(3)">
-                                                            <i class="bi bi-calendar-check me-1"></i>Próximos 3
-                                                        </button>
-                                                    </div>
+                                                    <button type="button" class="btn btn-success btn-sm flex-fill flex-md-auto" id="seleccionar-3-meses" onclick="seleccionarSiguientesMeses(3)">
+                                                        <i class="bi bi-calendar-check me-1"></i>
+                                                        <span class="d-inline d-md-none">3 Meses</span>
+                                                        <span class="d-none d-md-inline">Próximos 3</span>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -226,18 +230,21 @@ require_once __DIR__ . '/../layouts/header.php';
 
                                         <!-- Summary -->
                                         <div class="mt-3 p-3 bg-light rounded">
-                                            <div class="row text-center">
-                                                <div class="col-4">
-                                                    <div class="fw-bold text-primary">Mensualidades seleccionadas</div>
+                                            <div class="row text-center g-2">
+                                                <div class="col-6 col-md-4">
+                                                    <div class="fw-bold text-primary small d-md-none">Seleccionadas</div>
+                                                    <div class="fw-bold text-primary d-none d-md-block">Mensualidades seleccionadas</div>
                                                     <div class="h4 mb-0" id="mensualidadesCount">0</div>
                                                 </div>
-                                                <div class="col-4">
-                                                    <div class="fw-bold text-success">Total USD</div>
-                                                    <div class="h4 mb-0 text-success" id="totalUSD">$0.00</div>
+                                                <div class="col-6 col-md-4">
+                                                    <div class="fw-bold text-success small d-md-none">Total USD</div>
+                                                    <div class="fw-bold text-success d-none d-md-block">Total USD</div>
+                                                    <div class="h5 mb-0 text-success" id="totalUSD">$0.00</div>
                                                 </div>
-                                                <div class="col-4">
-                                                    <div class="fw-bold text-info">Total Bs</div>
-                                                    <div class="h4 mb-0 text-info" id="totalBS">0.00 Bs</div>
+                                                <div class="col-12 col-md-4">
+                                                    <div class="fw-bold text-info small d-md-none">Total Bs</div>
+                                                    <div class="fw-bold text-info d-none d-md-block">Total Bs</div>
+                                                    <div class="h5 mb-0 text-info" id="totalBS">0.00 Bs</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -278,7 +285,6 @@ require_once __DIR__ . '/../layouts/header.php';
                                             <option value="">Seleccione...</option>
                                             <option value="transferencia">Transferencia Bancaria</option>
                                             <option value="pago_movil">Pago Móvil</option>
-                                            <option value="zelle">Zelle</option>
                                             <option value="efectivo">Efectivo</option>
                                             <option value="otro">Otro</option>
                                         </select>
@@ -320,12 +326,14 @@ require_once __DIR__ . '/../layouts/header.php';
                                 </div>
 
                                 <!-- Action Buttons -->
-                                <div class="d-flex gap-3 justify-content-end">
-                                    <a href="<?= url('cliente/dashboard') ?>" class="btn btn-outline-secondary">
+                                <div class="d-flex flex-column flex-sm-row gap-2 gap-sm-3 justify-content-end">
+                                    <a href="<?= url('cliente/dashboard') ?>" class="btn btn-outline-secondary order-2 order-sm-1">
                                         <i class="bi bi-x-circle me-2"></i>Cancelar
                                     </a>
-                                    <button type="submit" class="btn btn-primary btn-lg" id="btnSubmit">
-                                        <i class="bi bi-upload me-2"></i>Registrar Pago
+                                    <button type="submit" class="btn btn-primary order-1 order-sm-2" id="btnSubmit">
+                                        <i class="bi bi-upload me-2"></i>
+                                        <span class="d-inline d-sm-none">Registrar</span>
+                                        <span class="d-none d-sm-inline">Registrar Pago</span>
                                     </button>
                                 </div>
                             </form>
@@ -442,31 +450,68 @@ require_once __DIR__ . '/../layouts/header.php';
                             </h6>
                         </div>
                         <div class="card-body">
-                            <div class="mb-3">
-                                <small class="text-muted">Banco</small>
-                                <div class="fw-bold">Banco de Venezuela</div>
-                            </div>
-                            <div class="mb-3">
-                                <small class="text-muted">Titular</small>
-                                <div class="fw-bold">Asociación de Vecinos</div>
-                            </div>
-                            <div class="mb-3">
-                                <small class="text-muted">Cuenta Corriente (Bs)</small>
-                                <div class="d-flex align-items-center justify-content-between">
-                                    <code class="text-break">0102-0000-0000000000</code>
-                                    <button class="btn btn-sm btn-link" onclick="copyToClipboard('0102-0000-0000000000')">
-                                        <i class="bi bi-clipboard"></i>
-                                    </button>
+                            <!-- Transferencia Bancaria -->
+                            <div class="mb-4">
+                                <h6 class="text-primary mb-3">
+                                    <i class="bi bi-arrow-left-right me-2"></i>Transferencia Bancaria
+                                </h6>
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="row g-3">
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Banco</small>
+                                            <div class="fw-bold small">Banco Venezolano de Crédito</div>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Titular</small>
+                                            <div class="fw-bold small">CI: 14020305</div>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Tipo de Cuenta</small>
+                                            <div class="fw-bold small">Cuenta Corriente</div>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Número de Cuenta</small>
+                                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                                <code class="text-break small flex-grow-1">01040108990108045159</code>
+                                                <button class="btn btn-sm btn-link p-0 flex-shrink-0" onclick="copyToClipboard('01040108990108045159')" title="Copiar">
+                                                    <i class="bi bi-clipboard"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <hr>
+
+                            <!-- Pago Móvil -->
                             <div class="mb-3">
-                                <small class="text-muted">Zelle (USD)</small>
-                                <div class="d-flex align-items-center justify-content-between">
-                                    <code class="text-break">pagos@estacionamiento.com</code>
-                                    <button class="btn btn-sm btn-link" onclick="copyToClipboard('pagos@estacionamiento.com')">
-                                        <i class="bi bi-clipboard"></i>
-                                    </button>
+                                <h6 class="text-success mb-3">
+                                    <i class="bi bi-phone me-2"></i>Pago Móvil (Bs)
+                                </h6>
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <small class="text-muted d-block">Banco</small>
+                                            <div class="fw-bold small">Banco Venezolano de Crédito (0104)</div>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">C.I.</small>
+                                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                                <code class="text-break small flex-grow-1">14020305</code>
+                                                <button class="btn btn-sm btn-link p-0 flex-shrink-0" onclick="copyToClipboard('14020305')" title="Copiar">
+                                                    <i class="bi bi-clipboard"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Teléfono</small>
+                                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                                <code class="text-break small flex-grow-1">04242543661</code>
+                                                <button class="btn btn-sm btn-link p-0 flex-shrink-0" onclick="copyToClipboard('04242543661')" title="Copiar">
+                                                    <i class="bi bi-clipboard"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -923,6 +968,66 @@ function generarMensualidadesFuturas(meses) {
 .step-indicator .step-number {
     flex-shrink: 0;
     margin-top: 2px;
+}
+
+/* Mejoras para móviles */
+@media (max-width: 576px) {
+    /* Espaciado más cómodo en móviles */
+    .card-body {
+        padding: 1rem !important;
+    }
+
+    /* Botones más pequeños en móviles */
+    .btn-group .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    /* Mejor espaciado en la información bancaria */
+    .bg-light {
+        margin-left: -0.5rem;
+        margin-right: -0.5rem;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+
+    /* Ajustes en los títulos */
+    h5 {
+        font-size: 1.1rem;
+    }
+
+    h6 {
+        font-size: 1rem;
+    }
+
+    /* Mejor legibilidad en los códigos */
+    code {
+        word-break: break-all;
+        font-size: 0.8rem;
+    }
+
+    /* Ajustes en el resumen */
+    #totalUSD, #totalBS {
+        font-size: 1.1rem !important;
+    }
+}
+
+/* Ajustes para tablets y móviles grandes */
+@media (max-width: 768px) {
+    /* Mejor distribución de botones */
+    .btn-group {
+        flex-wrap: wrap;
+    }
+
+    .btn-group .btn {
+        flex: 1 1 auto;
+        margin-bottom: 0.25rem;
+    }
+
+    /* Mejor espaciado en columnas */
+    .col-md-6 {
+        margin-bottom: 1rem;
+    }
 }
 </style>
 

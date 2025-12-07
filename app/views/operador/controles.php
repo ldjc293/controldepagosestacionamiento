@@ -159,11 +159,19 @@ require_once __DIR__ . '/../layouts/header.php';
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
-                                                    <?php if (!empty($item['lista_controles'])): ?>
-                                                        <small><?= htmlspecialchars($item['lista_controles']) ?></small>
-                                                    <?php else: ?>
-                                                        <span class="text-muted">-</span>
-                                                    <?php endif; ?>
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <?php if (!empty($item['lista_controles'])): ?>
+                                                            <small><?= htmlspecialchars($item['lista_controles']) ?></small>
+                                                        <?php else: ?>
+                                                            <span class="text-muted">-</span>
+                                                        <?php endif; ?>
+                                                        <a href="#gestionModal"
+                                                           class="btn btn-sm btn-outline-success ms-2"
+                                                           title="Gestionar Controles"
+                                                           onclick="abrirGestionControles(<?= $item['usuario_id'] ?>, '<?= htmlspecialchars($item['nombre_completo']) ?>', '<?= htmlspecialchars($item['apartamento']) ?>')">
+                                                            <i class="bi bi-gear"></i>
+                                                        </a>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -281,6 +289,11 @@ require_once __DIR__ . '/../layouts/header.php';
                                                         <div class="mt-1 small text-muted">
                                                             <i class="bi bi-dash-circle"></i> Disponible
                                                         </div>
+                                                        <div class="mt-2 text-center">
+                                                            <a href="<?= url('operador/controles/asignar?id=' . $controlA['id']) ?>" class="btn btn-sm btn-outline-primary">
+                                                                <i class="bi bi-plus-circle"></i> Asignar
+                                                            </a>
+                                                        </div>
                                                     <?php endif; ?>
                                                 </div>
                                             <?php else: ?>
@@ -325,6 +338,11 @@ require_once __DIR__ . '/../layouts/header.php';
                                                     <?php else: ?>
                                                         <div class="mt-1 small text-muted">
                                                             <i class="bi bi-dash-circle"></i> Disponible
+                                                        </div>
+                                                        <div class="mt-2 text-center">
+                                                            <a href="<?= url('operador/controles/asignar?id=' . $controlB['id']) ?>" class="btn btn-sm btn-outline-primary">
+                                                                <i class="bi bi-plus-circle"></i> Asignar
+                                                            </a>
                                                         </div>
                                                     <?php endif; ?>
                                                 </div>
@@ -383,5 +401,42 @@ require_once __DIR__ . '/../layouts/header.php';
 
     </div>
 </div>
+
+<!-- Modal para gestión de controles -->
+<div class="modal fade" id="gestionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-controller"></i>
+                    Gestionar Controles - <span id="modalUsuarioNombre"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalContent">
+                <!-- Content will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function abrirGestionControles(usuarioId, nombreUsuario, apartamento) {
+    document.getElementById('modalUsuarioNombre').textContent = nombreUsuario + ' (' + apartamento + ')';
+
+    // Load content via AJAX
+    fetch('<?= url('operador/gestionar-controles-usuario-ajax') ?>?id=' + usuarioId)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('modalContent').innerHTML = html;
+            const modal = new bootstrap.Modal(document.getElementById('gestionModal'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Error loading control management:', error);
+            document.getElementById('modalContent').innerHTML = '<div class="alert alert-danger">Error al cargar la gestión de controles</div>';
+        });
+}
+</script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

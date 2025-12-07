@@ -190,8 +190,10 @@ class Usuario
      */
     public static function create(array $data): int
     {
-        // Hash de contraseña
-        $passwordHash = password_hash($data['password'], PASSWORD_BCRYPT);
+        // Hash de contraseña si no viene ya hasheada
+        $passwordHash = isset($data['is_hashed']) && $data['is_hashed'] 
+            ? $data['password'] 
+            : password_hash($data['password'], PASSWORD_BCRYPT);
 
         $sql = "INSERT INTO usuarios (
             nombre_completo, email, password, telefono, cedula, rol,

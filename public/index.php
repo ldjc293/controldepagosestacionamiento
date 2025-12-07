@@ -19,6 +19,8 @@ require_once __DIR__ . '/../config/database.php';
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
 header('X-XSS-Protection: 1; mode=block');
+// CSP Header para permitir jQuery y Bootstrap
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://code.jquery.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://cdn.jsdelivr.net;");
 
 // Obtener la URL solicitada
 $url = isset($_GET['url']) ? rtrim($_GET['url'], '/') : '';
@@ -40,7 +42,9 @@ $controllerMap = [
     'admin' => 'AdminController',
     'cliente' => 'ClienteController',
     'operador' => 'OperadorController',
-    'consultor' => 'ConsultorController'
+    'consultor' => 'ConsultorController',
+    'api' => 'ApiController',
+    'admin-solicitudes' => 'AdminSolicitudesController'
 ];
 
 // Verificar si el controlador existe
@@ -57,7 +61,7 @@ $controllerFile = __DIR__ . "/../app/controllers/{$controllerName}.php";
 if (!file_exists($controllerFile)) {
     // Si no existe, mostrar error 404
     http_response_code(404);
-    include __DIR__ . "/../app/views/errors/404.php";
+    echo "Error 404: Controlador no encontrado";
     exit;
 }
 
@@ -76,7 +80,7 @@ $controllerInstance = new $controllerName();
 // Verificar si el método existe
 if (!method_exists($controllerInstance, $action)) {
     http_response_code(404);
-    include __DIR__ . "/../app/views/errors/404.php";
+    echo "Error 404: Método no encontrado";
     exit;
 }
 
@@ -89,7 +93,7 @@ try {
         die("Error: " . $e->getMessage());
     } else {
         http_response_code(500);
-        include __DIR__ . "/../app/views/errors/500.php";
+        echo "Error 500: Error interno del servidor";
         exit;
     }
 }

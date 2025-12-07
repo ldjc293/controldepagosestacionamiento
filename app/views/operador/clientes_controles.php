@@ -152,10 +152,18 @@ require_once __DIR__ . '/../layouts/header.php';
                                             </div>
                                         </td>
                                         <td>
-                                            <a href="<?= url('operador/registrar-pago-presencial?buscar=' . urlencode($cliente['email'])) ?>"
-                                               class="btn btn-sm btn-primary">
-                                                <i class="bi bi-cash-coin"></i> Registrar Pago
-                                            </a>
+                                            <div class="btn-group btn-group-sm">
+                                                <a href="<?= url('operador/controles') ?>"
+                                                   class="btn btn-outline-success"
+                                                   title="Gestionar Controles">
+                                                    <i class="bi bi-controller"></i> Gestionar
+                                                </a>
+                                                <a href="<?= url('operador/registrar-pago-presencial?buscar=' . urlencode($cliente['email'])) ?>"
+                                                   class="btn btn-primary"
+                                                   title="Registrar Pago">
+                                                    <i class="bi bi-cash-coin"></i> Pago
+                                                </a>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

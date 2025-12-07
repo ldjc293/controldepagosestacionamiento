@@ -170,7 +170,7 @@ class ClienteController
         }
 
         // Validar que se suba comprobante para métodos que lo requieren
-        $metodosConComprobante = ['transferencia', 'pago_movil', 'zelle'];
+        $metodosConComprobante = ['transferencia', 'pago_movil'];
         if (in_array($metodoPago, $metodosConComprobante) && 
             (!isset($_FILES['comprobante']) || $_FILES['comprobante']['error'] === UPLOAD_ERR_NO_FILE)) {
             $_SESSION['error'] = 'Debe subir el comprobante de pago para el método seleccionado';
@@ -228,11 +228,7 @@ class ClienteController
                     $monedaPago = 'bs_efectivo';
                 }
             } elseif ($moneda === 'USD') {
-                if ($metodoPago === 'zelle') {
-                    $monedaPago = 'usd_zelle';
-                } else {
-                    $monedaPago = 'usd_efectivo';
-                }
+                $monedaPago = 'usd_efectivo';
             }
             
             $pagoId = Pago::registrar([
@@ -535,6 +531,9 @@ class ClienteController
         $descripcion = sanitize($_POST['descripcion'] ?? '');
         $controlId = intval($_POST['control_id'] ?? 0);
 
+        // Debug log
+        writeLog("ClienteController::processSolicitud - tipo_solicitud recibido: '$tipoSolicitud'", 'debug');
+
         // Validaciones
         $tiposPermitidos = ['desincorporar_control', 'reportar_perdido', 'agregar_control', 'comprar_control', 'solicitud_personalizada'];
         if (empty($tipoSolicitud) || !in_array($tipoSolicitud, $tiposPermitidos)) {
@@ -760,6 +759,92 @@ class ClienteController
         }
 
         redirect('cliente/notificaciones');
+    }
+
+    /**
+     * Solicitar cambio de estado de control
+     */
+    public function solicitarCambioEstado(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('cliente/controles');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('cliente/controles');
+            return;
+        }
+
+        $controlNumero = sanitize($_POST['control_numero'] ?? '');
+        $motivoSolicitud = $_POST['motivo_solicitud'] ?? '';
+        $descripcion = sanitize($_POST['descripcion'] ?? '');
+        $telefono = sanitize($_POST['telefono'] ?? '');
+
+        // Validaciones
+        if (empty($controlNumero)) {
+            $_SESSION['error'] = 'Número de control no válido';
+            redirect('cliente/controles');
+            return;
+        }
+
+        if (empty($motivoSolicitud)) {
+            $_SESSION['error'] = 'Debe seleccionar un motivo de solicitud';
+            redirect('cliente/controles');
+            return;
+        }
+
+        if (empty($descripcion)) {
+            $_SESSION['error'] = 'Debe proporcionar una descripción detallada';
+            redirect('cliente/controles');
+            return;
+        }
+
+        // Verificar que el control pertenezca al usuario
+        $sql = "SELECT c.id, au.id as apartamento_usuario_id
+                FROM controles_estacionamiento c
+                JOIN apartamento_usuario au ON au.id = c.apartamento_usuario_id
+                WHERE c.numero_control_completo = ? AND au.usuario_id = ? AND au.activo = TRUE";
+
+        $controlData = Database::fetchOne($sql, [$controlNumero, $usuario->id]);
+
+        if (!$controlData) {
+            $_SESSION['error'] = 'El control especificado no le pertenece o no existe';
+            redirect('cliente/controles');
+            return;
+        }
+
+        // Crear la solicitud
+        try {
+            $sql = "INSERT INTO solicitudes_cambios (
+                        apartamento_usuario_id, tipo_solicitud, control_id,
+                        motivo, estado, fecha_solicitud
+                    ) VALUES (?, ?, ?, ?, 'pendiente', NOW())";
+
+            $params = [
+                $controlData['apartamento_usuario_id'],
+                'cambio_estado_control', // Tipo específico para solicitudes de cambio de estado
+                $controlData['id'],
+                $descripcion . "\n\nMotivo: " . $motivoSolicitud . ($telefono ? "\nTeléfono de contacto: " . $telefono : '')
+            ];
+
+            Database::execute($sql, $params);
+
+            writeLog("Cliente {$usuario->email} solicitó cambio de estado para control {$controlNumero}", 'info');
+
+            $_SESSION['success'] = 'Solicitud de cambio de estado enviada correctamente. Será revisada por el administrador.';
+            redirect('cliente/controles');
+
+        } catch (Exception $e) {
+            writeLog("Error al crear solicitud de cambio de estado: " . $e->getMessage(), 'error');
+            $_SESSION['error'] = 'Error al enviar la solicitud. Intente nuevamente';
+            redirect('cliente/controles');
+        }
     }
 
     // ==================== HELPERS ====================

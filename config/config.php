@@ -253,6 +253,7 @@ define('ESTADOS_COMPROBANTE', [
 ]);
 
 define('TIPOS_SOLICITUD', [
+    'registro_nuevo_usuario' => 'Registro de Nuevo Usuario',
     'cambio_cantidad_controles' => 'Cambio de Cantidad de Controles',
     'suspension_control' => 'Suspensión de Control',
     'desactivacion_control' => 'Desactivación de Control'

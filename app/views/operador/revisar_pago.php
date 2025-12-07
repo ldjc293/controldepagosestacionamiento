@@ -53,7 +53,7 @@ require_once __DIR__ . '/../layouts/header.php';
                             <div class="col-md-4">
                                 <small class="text-muted">Monto Pagado</small>
                                 <h3 class="text-primary mb-0">
-                                    <?php if ($pago->moneda_pago === 'usd_efectivo' || $pago->moneda_pago === 'usd_zelle'): ?>
+                                    <?php if ($pago->moneda_pago === 'usd_efectivo'): ?>
                                         <?= formatUSD($pago->monto_usd) ?>
                                     <?php else: ?>
                                         <?= formatBs($pago->monto_bs) ?>
@@ -66,7 +66,6 @@ require_once __DIR__ . '/../layouts/header.php';
                                     <?php
                                     $metodos = [
                                         'usd_efectivo' => ['label' => 'USD Efectivo', 'icon' => 'cash'],
-                                        'usd_zelle' => ['label' => 'Zelle', 'icon' => 'phone'],
                                         'bs_transferencia' => ['label' => 'Transferencia Bs', 'icon' => 'bank'],
                                         'bs_pago_movil' => ['label' => 'Pago Móvil', 'icon' => 'phone'],
                                         'bs_efectivo' => ['label' => 'Bs Efectivo', 'icon' => 'cash']
@@ -244,7 +243,7 @@ require_once __DIR__ . '/../layouts/header.php';
                     <strong>Detalles del pago:</strong>
                     <ul class="list-unstyled mt-2">
                         <li><i class="bi bi-person"></i> Cliente: <?= htmlspecialchars($cliente->nombre_completo) ?></li>
-                        <li><i class="bi bi-cash"></i> Monto: <?php if ($pago->moneda_pago === 'usd_efectivo' || $pago->moneda_pago === 'usd_zelle'): ?><?= formatUSD($pago->monto_usd) ?><?php else: ?><?= formatBs($pago->monto_bs) ?><?php endif; ?></li>
+                        <li><i class="bi bi-cash"></i> Monto: <?php if ($pago->moneda_pago === 'usd_efectivo'): ?><?= formatUSD($pago->monto_usd) ?><?php else: ?><?= formatBs($pago->monto_bs) ?><?php endif; ?></li>
                         <li><i class="bi bi-calendar"></i> Fecha: <?= date('d/m/Y', strtotime($pago->fecha_pago)) ?></li>
                     </ul>
                 </div>

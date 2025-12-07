@@ -9,6 +9,7 @@ require_once __DIR__ . '/../models/Usuario.php';
 require_once __DIR__ . '/../models/Pago.php';
 require_once __DIR__ . '/../models/Mensualidad.php';
 require_once __DIR__ . '/../models/Control.php';
+require_once __DIR__ . '/../models/SolicitudCambio.php';
 require_once __DIR__ . '/../helpers/ValidationHelper.php';
 
 class OperadorController
@@ -477,11 +478,7 @@ class OperadorController
                 $monedaPago = 'bs_efectivo';
             }
         } elseif ($moneda === 'USD') {
-            if ($metodoPago === 'zelle') {
-                $monedaPago = 'usd_zelle';
-            } else {
-                $monedaPago = 'usd_efectivo';
-            }
+            $monedaPago = 'usd_efectivo';
         }
 
         // Registrar y aprobar automáticamente (pago presencial)
@@ -539,9 +536,11 @@ class OperadorController
         $usuario = $this->checkAuth();
         if (!$usuario) return;
 
-        $solicitudes = $this->getSolicitudesPendientes();
+        // Obtener TODAS las solicitudes pendientes
+        $solicitudesPendientes = SolicitudCambio::getPendientes();
 
-        require_once __DIR__ . '/../views/operador/solicitudes.php';
+        // Usar la vista unificada de admin (funciona para ambos roles)
+        require_once __DIR__ . '/../views/admin/solicitudes/index.php';
     }
 
     /**
@@ -569,6 +568,9 @@ class OperadorController
     /**
      * Vista de controles ordenados por receptor con filtros
      */
+    /**
+     * Vista de controles ordenados por receptor con filtros
+     */
     public function vistaControles(): void
     {
         $usuario = $this->checkAuth();
@@ -592,6 +594,177 @@ class OperadorController
         $controles = Control::getControlesConPropietarios($filters);
 
         require_once __DIR__ . '/../views/operador/vista_controles.php';
+    }
+
+    /**
+     * Asignar control (Operador)
+     */
+    public function asignarControl(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        $controlId = intval($_GET['id'] ?? 0);
+
+        if (!$controlId) {
+            redirect('operador/controles');
+            return;
+        }
+
+        $control = Control::findById($controlId);
+
+        if (!$control || $control->estado !== 'vacio') {
+            $_SESSION['error'] = 'Control no disponible';
+            redirect('operador/controles');
+            return;
+        }
+
+        // Obtener apartamentos con residentes
+        $sql = "SELECT au.id, au.cantidad_controles,
+                       u.nombre_completo,
+                       CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento
+                FROM apartamento_usuario au
+                JOIN usuarios u ON u.id = au.usuario_id
+                JOIN apartamentos a ON a.id = au.apartamento_id
+                WHERE au.activo = TRUE
+                ORDER BY a.bloque, a.numero_apartamento";
+
+        $apartamentosUsuarios = Database::fetchAll($sql);
+
+        require_once __DIR__ . '/../views/operador/controles/asignar.php';
+    }
+
+    /**
+     * Procesar asignación de control (Operador)
+     */
+    public function processAsignarControl(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('operador/controles');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('operador/controles');
+            return;
+        }
+
+        $controlId = intval($_POST['control_id'] ?? 0);
+        $apartamentoUsuarioId = intval($_POST['apartamento_usuario_id'] ?? 0);
+
+        $control = Control::findById($controlId);
+
+        if (!$control) {
+            $_SESSION['error'] = 'Control no encontrado';
+            redirect('operador/controles');
+            return;
+        }
+
+        if ($control->asignar($apartamentoUsuarioId, $usuario->id)) {
+            $_SESSION['success'] = 'Control asignado correctamente';
+            writeLog("Control {$control->numero_control_completo} asignado por operador {$usuario->email}", 'info');
+        } else {
+            $_SESSION['error'] = 'Error al asignar el control';
+        }
+
+        redirect('operador/controles');
+    }
+
+    /**
+     * Aprobar solicitud de registro con asignación manual de controles (Operador)
+     */
+    public function aprobarSolicitudRegistro(): void
+    {
+        $operador = $this->checkAuth();
+        if (!$operador) {
+            echo json_encode(['success' => false, 'message' => 'No autorizado']);
+            exit;
+        }
+
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'message' => 'Método no permitido']);
+            exit;
+        }
+
+        // Leer datos JSON del body
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($data['csrf_token'] ?? '')) {
+            echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido']);
+            exit;
+        }
+
+        $solicitudId = (int)($data['solicitud_id'] ?? 0);
+
+        if ($solicitudId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID de solicitud inválido']);
+            exit;
+        }
+
+        $solicitud = SolicitudCambio::findById($solicitudId);
+
+        if (!$solicitud) {
+            echo json_encode(['success' => false, 'message' => 'Solicitud no encontrada']);
+            exit;
+        }
+
+        if ($solicitud->tipo_solicitud !== 'registro_nuevo_usuario') {
+            echo json_encode(['success' => false, 'message' => 'Esta función solo es válida para solicitudes de registro de nuevos usuarios']);
+            exit;
+        }
+
+        // Preparar datos de asignación
+        $datosAsignacion = [
+            'cantidad_controles' => intval($data['cantidad_controles'] ?? 0),
+            'controles' => $data['controles'] ?? [],
+            'bloque' => sanitize($data['bloque'] ?? ''),
+            'escalera' => sanitize($data['escalera'] ?? ''),
+            'apartamento' => sanitize($data['apartamento'] ?? ''),
+            'piso' => intval($data['piso'] ?? 0)
+        ];
+
+        // Validaciones
+        if ($datosAsignacion['cantidad_controles'] <= 0 || $datosAsignacion['cantidad_controles'] > 10) {
+            echo json_encode(['success' => false, 'message' => 'La cantidad de controles debe estar entre 1 y 10']);
+            exit;
+        }
+
+        if (count($datosAsignacion['controles']) !== $datosAsignacion['cantidad_controles']) {
+            echo json_encode(['success' => false, 'message' => 'La cantidad de controles seleccionados no coincide con la cantidad especificada']);
+            exit;
+        }
+
+        if (empty($datosAsignacion['bloque']) || empty($datosAsignacion['escalera']) || empty($datosAsignacion['apartamento'])) {
+            echo json_encode(['success' => false, 'message' => 'Los datos del apartamento son obligatorios']);
+            exit;
+        }
+
+        try {
+            $usuarioId = $solicitud->crearUsuarioConAsignacionManual($operador->id, $datosAsignacion);
+
+            if ($usuarioId) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Usuario creado exitosamente y controles asignados',
+                    'usuario_id' => $usuarioId
+                ]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Error al crear el usuario']);
+            }
+        } catch (Exception $e) {
+            writeLog("Error en aprobarSolicitudRegistro (operador): " . $e->getMessage(), 'error');
+            echo json_encode(['success' => false, 'message' => 'Error interno del servidor']);
+        }
+        exit;
     }
 
     /**
@@ -958,6 +1131,365 @@ class OperadorController
         $estadisticas = Control::getEstadisticas();
 
         require_once __DIR__ . '/../views/operador/controles.php';
+    }
+
+
+    /**
+     * Gestionar controles de un usuario específico (AJAX para modal)
+     */
+    public function gestionarControlesUsuarioAjax(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        $usuarioId = intval($_GET['id'] ?? 0);
+
+        if (!$usuarioId) {
+            echo '<div class="alert alert-danger">Usuario no especificado</div>';
+            exit;
+        }
+
+        $usuarioGestionado = Usuario::findById($usuarioId);
+
+        if (!$usuarioGestionado) {
+            echo '<div class="alert alert-danger">Usuario no encontrado</div>';
+            exit;
+        }
+
+        // Obtener apartamento del usuario
+        $sql = "SELECT au.id as apartamento_usuario_id, au.cantidad_controles,
+                       a.bloque, a.escalera, a.piso, a.numero_apartamento
+                FROM apartamento_usuario au
+                JOIN apartamentos a ON a.id = au.apartamento_id
+                WHERE au.usuario_id = ? AND au.activo = 1
+                LIMIT 1";
+        $apartamento = Database::fetchOne($sql, [$usuarioId]);
+
+        if (!$apartamento) {
+            echo '<div class="alert alert-danger">El usuario no tiene un apartamento asignado</div>';
+            exit;
+        }
+
+        // Obtener controles actuales del usuario
+        $controlesActuales = Control::getByApartamentoUsuario($apartamento['apartamento_usuario_id']);
+
+        // Obtener controles disponibles para asignar
+        $controlesDisponibles = Control::getVacios();
+
+        // Renderizar contenido del modal
+        ob_start();
+        ?>
+        <!-- Información del Usuario -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Nombre:</strong> <?= htmlspecialchars($usuarioGestionado->nombre_completo) ?></p>
+                        <p><strong>Email:</strong> <?= htmlspecialchars($usuarioGestionado->email) ?></p>
+                        <p><strong>Teléfono:</strong> <?= htmlspecialchars($usuarioGestionado->telefono ?? 'No especificado') ?></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Apartamento:</strong> <?= htmlspecialchars($apartamento['bloque'] . '-' . $apartamento['numero_apartamento']) ?></p>
+                        <p><strong>Controles Asignados:</strong> <?= count($controlesActuales) ?> / <?= $apartamento['cantidad_controles'] ?></p>
+                        <p><strong>Rol:</strong> <span class="badge bg-primary"><?= ucfirst($usuarioGestionado->rol) ?></span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Controles Actuales -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-key"></i> Controles Actuales
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <?php if (empty($controlesActuales)): ?>
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-key" style="font-size: 2rem;"></i>
+                                <p class="mb-0 mt-2">No hay controles asignados</p>
+                            </div>
+                        <?php else: ?>
+                            <div class="list-group">
+                                <?php foreach ($controlesActuales as $control): ?>
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong><?= htmlspecialchars($control->numero_control_completo) ?></strong>
+                                            <span class="badge
+                                                <?php if ($control->estado === 'activo'): ?>bg-success
+                                                <?php elseif ($control->estado === 'bloqueado'): ?>bg-danger
+                                                <?php else: ?>bg-warning<?php endif; ?> ms-2">
+                                                <?= ucfirst($control->estado) ?>
+                                            </span>
+                                            <?php if ($control->fecha_asignacion): ?>
+                                                <br><small class="text-muted">
+                                                    Asignado: <?= date('d/m/Y', strtotime($control->fecha_asignacion)) ?>
+                                                </small>
+                                            <?php endif; ?>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                                onclick="removerControlAjax(<?= $control->id ?>, '<?= htmlspecialchars($control->numero_control_completo) ?>')">
+                                            <i class="bi bi-trash"></i> Remover
+                                        </button>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Asignar Nuevos Controles -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-plus-circle"></i> Asignar Nuevo Control
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <?php if (empty($controlesDisponibles)): ?>
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-exclamation-triangle" style="font-size: 2rem;"></i>
+                                <p class="mb-0 mt-2">No hay controles disponibles</p>
+                            </div>
+                        <?php else: ?>
+                            <form method="POST" action="<?= url('operador/asignar-control-usuario') ?>" id="formAsignarControl">
+                                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                                <input type="hidden" name="usuario_id" value="<?= $usuarioGestionado->id ?>">
+
+                                <div class="mb-3">
+                                    <label for="control_id" class="form-label">Seleccionar Control Disponible</label>
+                                    <select class="form-select" name="control_id" id="control_id" required>
+                                        <option value="">-- Seleccionar control --</option>
+                                        <?php foreach ($controlesDisponibles as $control): ?>
+                                            <option value="<?= $control['id'] ?>">
+                                                <?= htmlspecialchars($control['numero_control_completo']) ?> (Posición <?= $control['posicion_numero'] ?>, Receptor <?= $control['receptor'] ?>)
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <button type="submit" class="btn btn-success w-100">
+                                    <i class="bi bi-plus-circle"></i> Asignar Control
+                                </button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        function removerControlAjax(controlId, controlNumero) {
+            if (confirm('¿Está seguro de que desea remover el control ' + controlNumero + ' del usuario?')) {
+                const motivo = prompt('Motivo de la remoción:');
+                if (motivo && motivo.trim() !== '') {
+                    // Enviar petición AJAX
+                    fetch('<?= url('operador/remover-control-usuario') ?>', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams({
+                            'csrf_token': '<?= generateCSRFToken() ?>',
+                            'usuario_id': '<?= $usuarioGestionado->id ?>',
+                            'control_id': controlId,
+                            'motivo': motivo.trim()
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Recargar el modal
+                            location.reload();
+                        } else {
+                            alert('Error: ' + (data.message || 'Error desconocido'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error de conexión');
+                    });
+                }
+            }
+        }
+
+        // Manejar envío del formulario de asignación
+        document.getElementById('formAsignarControl')?.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+
+            fetch(this.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.redirected) {
+                    // Recargar el modal si fue exitoso
+                    location.reload();
+                } else {
+                    return response.text();
+                }
+            })
+            .then(text => {
+                if (text && text.includes('error')) {
+                    alert('Error al asignar el control');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error de conexión');
+            });
+        });
+        </script>
+        <?php
+        echo ob_get_clean();
+        exit;
+    }
+
+    /**
+     * Remover control de un usuario
+     */
+    public function removerControlUsuario(): void
+    {
+        $operador = $this->checkAuth();
+        if (!$operador) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('operador/clientes-controles');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => 'Token de seguridad inválido']);
+            } else {
+                $_SESSION['error'] = 'Token de seguridad inválido';
+                redirect('operador/clientes-controles');
+            }
+            return;
+        }
+
+        $controlId = intval($_POST['control_id'] ?? 0);
+        $usuarioId = intval($_POST['usuario_id'] ?? 0);
+        $motivo = sanitize($_POST['motivo'] ?? 'Removido por operador');
+
+        $control = Control::findById($controlId);
+        $usuario = Usuario::findById($usuarioId);
+
+        if (!$control || !$usuario) {
+            $errorMsg = 'Datos inválidos';
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => $errorMsg]);
+            } else {
+                $_SESSION['error'] = $errorMsg;
+                redirect('operador/gestionar-controles-usuario?id=' . $usuarioId);
+            }
+            return;
+        }
+
+        if ($control->desasignar($motivo, $operador->id)) {
+            $successMsg = 'Control removido correctamente';
+            writeLog("Control {$control->numero_control_completo} removido del usuario {$usuario->email} por operador {$operador->email}", 'info');
+
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => true, 'message' => $successMsg]);
+            } else {
+                $_SESSION['success'] = $successMsg;
+                redirect('operador/gestionar-controles-usuario?id=' . $usuarioId);
+            }
+        } else {
+            $errorMsg = 'Error al remover el control';
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => $errorMsg]);
+            } else {
+                $_SESSION['error'] = $errorMsg;
+                redirect('operador/gestionar-controles-usuario?id=' . $usuarioId);
+            }
+        }
+    }
+
+    /**
+     * Asignar control a un usuario
+     */
+    public function asignarControlUsuario(): void
+    {
+        $operador = $this->checkAuth();
+        if (!$operador) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('operador/clientes-controles');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => 'Token de seguridad inválido']);
+            } else {
+                $_SESSION['error'] = 'Token de seguridad inválido';
+                redirect('operador/clientes-controles');
+            }
+            return;
+        }
+
+        $controlId = intval($_POST['control_id'] ?? 0);
+        $usuarioId = intval($_POST['usuario_id'] ?? 0);
+
+        $control = Control::findById($controlId);
+        $usuario = Usuario::findById($usuarioId);
+
+        if (!$control || !$usuario) {
+            $errorMsg = 'Datos inválidos';
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => $errorMsg]);
+            } else {
+                $_SESSION['error'] = $errorMsg;
+                redirect('operador/gestionar-controles-usuario?id=' . $usuarioId);
+            }
+            return;
+        }
+
+        // Obtener apartamento_usuario_id del usuario
+        $sql = "SELECT id FROM apartamento_usuario WHERE usuario_id = ? AND activo = 1 LIMIT 1";
+        $apartamentoUsuario = Database::fetchOne($sql, [$usuarioId]);
+
+        if (!$apartamentoUsuario) {
+            $errorMsg = 'El usuario no tiene un apartamento asignado';
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => $errorMsg]);
+            } else {
+                $_SESSION['error'] = $errorMsg;
+                redirect('operador/gestionar-controles-usuario?id=' . $usuarioId);
+            }
+            return;
+        }
+
+        if ($control->asignar($apartamentoUsuario['id'], $operador->id)) {
+            $successMsg = 'Control asignado correctamente';
+            writeLog("Control {$control->numero_control_completo} asignado al usuario {$usuario->email} por operador {$operador->email}", 'info');
+
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => true, 'message' => $successMsg]);
+            } else {
+                $_SESSION['success'] = $successMsg;
+                redirect('operador/gestionar-controles-usuario?id=' . $usuarioId);
+            }
+        } else {
+            $errorMsg = 'Error al asignar el control';
+            if ($this->isAjaxRequest()) {
+                $this->jsonResponse(['success' => false, 'message' => $errorMsg]);
+            } else {
+                $_SESSION['error'] = $errorMsg;
+                redirect('operador/gestionar-controles-usuario?id=' . $usuarioId);
+            }
+        }
     }
 
     /**

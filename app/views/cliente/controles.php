@@ -291,10 +291,22 @@ require_once __DIR__ . '/../layouts/header.php';
 
 <script>
 function mostrarModalContacto(numeroControl) {
-    document.getElementById('contacto_control_numero').value = numeroControl;
-    document.getElementById('contacto_control_numero_display').value = numeroControl;
-    document.getElementById('contacto_motivo').value = '';
-    document.getElementById('contacto_descripcion').value = '';
+    // Resetear el formulario
+    const form = document.querySelector('#modalContacto form');
+    if (form) {
+        form.reset();
+    }
+
+    // Establecer valores específicos
+    const controlNumeroInput = document.getElementById('contacto_control_numero');
+    const controlNumeroDisplay = document.getElementById('contacto_control_numero_display');
+
+    if (controlNumeroInput) {
+        controlNumeroInput.value = numeroControl;
+    }
+    if (controlNumeroDisplay) {
+        controlNumeroDisplay.value = numeroControl;
+    }
 
     const modal = new bootstrap.Modal(document.getElementById('modalContacto'));
     modal.show();

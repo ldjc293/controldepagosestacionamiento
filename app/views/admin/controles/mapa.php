@@ -159,11 +159,18 @@ require_once __DIR__ . '/../../layouts/header.php';
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
-                                                    <?php if (!empty($item['lista_controles'])): ?>
-                                                        <small><?= htmlspecialchars($item['lista_controles']) ?></small>
-                                                    <?php else: ?>
-                                                        <span class="text-muted">-</span>
-                                                    <?php endif; ?>
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <?php if (!empty($item['lista_controles'])): ?>
+                                                            <small><?= htmlspecialchars($item['lista_controles']) ?></small>
+                                                        <?php else: ?>
+                                                            <span class="text-muted">-</span>
+                                                        <?php endif; ?>
+                                                        <a href="<?= url('admin/usuarios/editar?id=' . $item['usuario_id']) ?>"
+                                                           class="btn btn-sm btn-outline-primary ms-2"
+                                                           title="Gestionar Controles">
+                                                            <i class="bi bi-gear"></i>
+                                                        </a>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -489,15 +496,15 @@ function cambiarEstadoControl(selectElement) {
     // Preparar mensaje de confirmación según el tipo de cambio
     let mensajeConfirmacion = '';
     if (nuevoEstado === 'bloqueado') {
-        mensajeConfirmacion = `¿Está seguro de BLOQUEAR el control ${controlNumero}?\n\nEsto impedirá su uso hasta que sea desbloqueado.`;
+        mensajeConfirmacion = '¿Está seguro de BLOQUEAR el control ' + controlNumero + '?\n\nEsto impedirá su uso hasta que sea desbloqueado.';
     } else if (nuevoEstado === 'vacio') {
-        mensajeConfirmacion = `¿Está seguro de marcar como DISPONIBLE el control ${controlNumero}?\n\nEsto lo desasignará del propietario actual.`;
+        mensajeConfirmacion = '¿Está seguro de marcar como DISPONIBLE el control ' + controlNumero + '?\n\nEsto lo desasignará del propietario actual.';
     } else {
-        mensajeConfirmacion = `¿Cambiar el control ${controlNumero} de "${estadoActual}" a "${nuevoEstado}"?`;
+        mensajeConfirmacion = '¿Cambiar el control ' + controlNumero + ' de "' + estadoActual + '" a "' + nuevoEstado + '"?';
     }
 
     // Pedir motivo del cambio
-    const motivo = prompt(`Por favor, ingrese el motivo para cambiar el estado del control ${controlNumero}:`);
+    const motivo = prompt('Por favor, ingrese el motivo para cambiar el estado del control ' + controlNumero + ':');
     if (!motivo || motivo.trim() === '') {
         selectElement.value = estadoActual; // Restaurar valor original
         return;

@@ -115,7 +115,7 @@ class Pago
                 $estadoComprobante = 'no_aplica'; // Por defecto para pagos en efectivo
 
                 // Si es transferencia o pago móvil y tiene comprobante, requiere aprobación
-                if (in_array($data['moneda_pago'], ['bs_transferencia', 'bs_pago_movil', 'usd_zelle']) && !empty($data['comprobante_ruta'])) {
+                if (in_array($data['moneda_pago'], ['bs_transferencia', 'bs_pago_movil']) && !empty($data['comprobante_ruta'])) {
                     $estadoComprobante = 'pendiente';
                 }
             }

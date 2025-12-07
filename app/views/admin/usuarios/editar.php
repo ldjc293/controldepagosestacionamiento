@@ -258,64 +258,81 @@ require_once __DIR__ . '/../../layouts/header.php';
                         </div>
                     </div>
 
-                    <!-- Controles de Estacionamiento -->
-                    <?php if (isset($controles) && !empty($controles)): ?>
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-controller"></i> Controles Asignados
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <ul class="list-unstyled mb-0">
-                                    <?php foreach ($controles as $control): ?>
-                                        <li class="mb-3 pb-3 border-bottom">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <strong>
-                                                    <i class="bi bi-controller"></i>
-                                                    Control #<?= htmlspecialchars($control['numero_control_completo']) ?>
-                                                </strong>
-                                                <?php
-                                                $estadoBadge = [
-                                                    'activo' => 'success',
-                                                    'suspendido' => 'warning',
-                                                    'desactivado' => 'secondary',
-                                                    'perdido' => 'danger',
-                                                    'bloqueado' => 'dark',
-                                                    'vacio' => 'light'
-                                                ];
-                                                $colorBadge = $estadoBadge[$control['estado']] ?? 'secondary';
-                                                ?>
-                                                <span class="badge bg-<?= $colorBadge ?>">
-                                                    <?= ucfirst($control['estado']) ?>
-                                                </span>
+                    <!-- Gestión de Controles de Estacionamiento -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="bi bi-controller"></i> Gestión de Controles
+                            </h6>
+                            <span class="badge bg-info"><?= count($controles ?? []) ?> controles</span>
+                        </div>
+                        <div class="card-body">
+                            <!-- Controles Actuales -->
+                            <?php if (isset($controles) && !empty($controles)): ?>
+                                <div class="mb-3">
+                                    <h6 class="text-muted mb-2">Controles Asignados</h6>
+                                    <div class="list-group mb-3">
+                                        <?php foreach ($controles as $control): ?>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                                                <div>
+                                                    <strong class="small"><?= htmlspecialchars($control['numero_control_completo']) ?></strong>
+                                                    <?php
+                                                    $estadoBadge = [
+                                                        'activo' => 'success',
+                                                        'suspendido' => 'warning',
+                                                        'desactivado' => 'secondary',
+                                                        'perdido' => 'danger',
+                                                        'bloqueado' => 'dark',
+                                                        'vacio' => 'light'
+                                                    ];
+                                                    $colorBadge = $estadoBadge[$control['estado']] ?? 'secondary';
+                                                    ?>
+                                                    <span class="badge bg-<?= $colorBadge ?> ms-2 small">
+                                                        <?= ucfirst($control['estado']) ?>
+                                                    </span>
+                                                    <?php if ($control['fecha_asignacion']): ?>
+                                                        <br><small class="text-muted">
+                                                            Asignado: <?= date('d/m/Y', strtotime($control['fecha_asignacion'])) ?>
+                                                        </small>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                                        onclick="removerControl(<?= $control['id'] ?>, '<?= htmlspecialchars($control['numero_control_completo']) ?>')">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
                                             </div>
-                                            <?php if ($control['fecha_asignacion']): ?>
-                                                <small class="text-muted">
-                                                    <i class="bi bi-calendar-check"></i>
-                                                    Asignado: <?= date('d/m/Y', strtotime($control['fecha_asignacion'])) ?>
-                                                </small>
-                                            <?php endif; ?>
-                                        </li>
-                                    <?php endforeach; ?>
-                                </ul>
-                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+
+                            <!-- Asignar Nuevo Control -->
+                            <?php if (isset($controlesDisponibles) && !empty($controlesDisponibles)): ?>
+                                <div class="border-top pt-3">
+                                    <h6 class="text-muted mb-2">Asignar Nuevo Control</h6>
+                                    <form method="POST" action="<?= url('admin/asignar-control-usuario') ?>" class="d-flex gap-2">
+                                        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                                        <input type="hidden" name="usuario_id" value="<?= $usuario->id ?>">
+                                        <select class="form-select form-select-sm" name="control_id" required>
+                                            <option value="">Seleccionar control...</option>
+                                            <?php foreach ($controlesDisponibles as $control): ?>
+                                                <option value="<?= $control['id'] ?>">
+                                                    <?= htmlspecialchars($control['numero_control_completo']) ?> (Pos <?= $control['posicion_numero'] ?>, Rec <?= $control['receptor'] ?>)
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <i class="bi bi-plus-circle"></i> Asignar
+                                        </button>
+                                    </form>
+                                </div>
+                            <?php elseif (isset($controlesDisponibles)): ?>
+                                <div class="border-top pt-3 text-center">
+                                    <small class="text-muted">No hay controles disponibles para asignar</small>
+                                </div>
+                            <?php endif; ?>
                         </div>
-                    <?php elseif (isset($controles)): ?>
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-controller"></i> Controles Asignados
-                                </h6>
-                            </div>
-                            <div class="card-body text-center py-4">
-                                <i class="bi bi-inbox text-muted" style="font-size: 32px;"></i>
-                                <p class="text-muted mt-2 mb-0">
-                                    <small>Sin controles asignados</small>
-                                </p>
-                            </div>
-                        </div>
-                    <?php endif; ?>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
@@ -386,6 +403,38 @@ document.getElementById('formEditarUsuario').addEventListener('submit', function
     const btn = document.getElementById('btnSubmit');
     setButtonLoading(btn, true);
 });
+
+// Función para remover control
+function removerControl(controlId, controlNumero) {
+    if (confirm('¿Está seguro de que desea remover el control ' + controlNumero + ' del usuario?')) {
+        const motivo = prompt('Motivo de la remoción:');
+        if (motivo && motivo.trim() !== '') {
+            // Crear formulario y enviar
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '<?= url('admin/remover-control-usuario') ?>';
+            form.style.display = 'none';
+
+            const fields = {
+                'csrf_token': '<?= generateCSRFToken() ?>',
+                'usuario_id': '<?= $usuario->id ?>',
+                'control_id': controlId,
+                'motivo': motivo.trim()
+            };
+
+            for (const [name, value] of Object.entries(fields)) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            }
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+}
 </script>
 JS;
 ?>

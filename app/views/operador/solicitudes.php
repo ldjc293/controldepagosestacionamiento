@@ -76,7 +76,8 @@ require_once __DIR__ . '/../layouts/header.php';
                                                 'solicitud_personalizada' => ['label' => 'Solicitud Personalizada', 'icon' => 'chat-dots', 'color' => 'info'],
                                                 'cambio_cantidad_controles' => ['label' => 'Cambio de Cantidad', 'icon' => 'arrow-left-right', 'color' => 'secondary'],
                                                 'suspension_control' => ['label' => 'Suspensión', 'icon' => 'pause-circle', 'color' => 'warning'],
-                                                'desactivacion_control' => ['label' => 'Desactivación', 'icon' => 'x-circle', 'color' => 'dark']
+                                                'desactivacion_control' => ['label' => 'Desactivación', 'icon' => 'x-circle', 'color' => 'dark'],
+                                                'cambio_estado_control' => ['label' => 'Cambio Estado Control', 'icon' => 'arrow-repeat', 'color' => 'secondary']
                                             ];
                                             $tipoInfo = $tipos[$solicitud['tipo_solicitud']] ?? ['label' => ucfirst(str_replace('_', ' ', $solicitud['tipo_solicitud'])), 'icon' => 'tag', 'color' => 'secondary'];
                                             ?>
@@ -198,7 +199,8 @@ require_once __DIR__ . '/../layouts/header.php';
                                                                     'solicitud_personalizada' => 'Solicitud Personalizada',
                                                                     'cambio_cantidad_controles' => 'Cambio de Cantidad de Controles',
                                                                     'suspension_control' => 'Suspensión de Control',
-                                                                    'desactivacion_control' => 'Desactivación de Control'
+                                                                    'desactivacion_control' => 'Desactivación de Control',
+                                                                    'cambio_estado_control' => 'Cambio Estado Control'
                                                                 ];
                                                                 echo $tipos[$tipoSolicitud] ?? ucfirst(str_replace('_', ' ', $tipoSolicitud));
                                                             }

@@ -282,7 +282,6 @@
                 <option value="transferencia">Transferencia Bancaria</option>
                 <option value="pago_movil">Pago Móvil</option>
                 <option value="efectivo">Efectivo</option>
-                <option value="zelle">Zelle</option>
             </select>
         </div>
 

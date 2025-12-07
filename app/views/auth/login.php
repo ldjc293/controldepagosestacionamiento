@@ -279,6 +279,13 @@
                     <i class="bi bi-question-circle"></i> ¿Olvidaste tu contraseña?
                 </a>
             </div>
+
+            <div class="forgot-password" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0;">
+                <p style="color: var(--secondary-color); font-size: 14px; margin-bottom: 10px;">¿No tienes una cuenta?</p>
+                <a href="<?= url('auth/registro') ?>" style="color: var(--success-color);">
+                    <i class="bi bi-person-plus"></i> Registrarse
+                </a>
+            </div>
         </div>
 
         <div class="footer-text">

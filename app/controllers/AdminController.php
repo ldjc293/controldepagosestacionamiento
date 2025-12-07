@@ -10,6 +10,7 @@ require_once __DIR__ . '/../models/Apartamento.php';
 require_once __DIR__ . '/../models/Control.php';
 require_once __DIR__ . '/../models/Mensualidad.php';
 require_once __DIR__ . '/../models/Pago.php';
+require_once __DIR__ . '/../models/SolicitudCambio.php';
 require_once __DIR__ . '/../helpers/ValidationHelper.php';
 require_once __DIR__ . '/../helpers/MailHelper.php';
 
@@ -245,7 +246,7 @@ class AdminController
         $apartamento = Database::fetchOne($sql, [$usuarioId]);
 
         // Obtener controles asignados
-        $sql = "SELECT ce.numero_control_completo, ce.estado, ce.fecha_asignacion
+        $sql = "SELECT ce.id, ce.numero_control_completo, ce.estado, ce.fecha_asignacion
                 FROM apartamento_usuario au
                 LEFT JOIN controles_estacionamiento ce ON ce.apartamento_usuario_id = au.id
                 WHERE au.usuario_id = ? AND au.activo = 1
@@ -256,6 +257,12 @@ class AdminController
         $controles = array_filter($controles, function($c) {
             return !empty($c['numero_control_completo']);
         });
+
+        // Obtener controles disponibles para asignar (solo para clientes)
+        $controlesDisponibles = [];
+        if ($usuario->rol === 'cliente' && $apartamento) {
+            $controlesDisponibles = Control::getVacios();
+        }
 
         require_once __DIR__ . '/../views/admin/usuarios/editar.php';
     }
@@ -976,6 +983,102 @@ class AdminController
         $estadisticas = Control::getEstadisticas();
 
         require_once __DIR__ . '/../views/admin/controles/mapa.php';
+    }
+
+
+    /**
+     * Remover control de un usuario
+     */
+    public function removerControlUsuario(): void
+    {
+        $admin = $this->checkAuth();
+        if (!$admin) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('admin/usuarios');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('admin/usuarios');
+            return;
+        }
+
+        $controlId = intval($_POST['control_id'] ?? 0);
+        $usuarioId = intval($_POST['usuario_id'] ?? 0);
+        $motivo = sanitize($_POST['motivo'] ?? 'Removido por administrador');
+
+        $control = Control::findById($controlId);
+        $usuario = Usuario::findById($usuarioId);
+
+        if (!$control || !$usuario) {
+            $_SESSION['error'] = 'Datos inválidos';
+            redirect('admin/gestionar-controles-usuario?id=' . $usuarioId);
+            return;
+        }
+
+        if ($control->desasignar($motivo, $admin->id)) {
+            $_SESSION['success'] = 'Control removido correctamente';
+            writeLog("Control {$control->numero_control_completo} removido del usuario {$usuario->email} por admin {$admin->email}", 'info');
+        } else {
+            $_SESSION['error'] = 'Error al remover el control';
+        }
+
+        redirect('admin/gestionar-controles-usuario?id=' . $usuarioId);
+    }
+
+    /**
+     * Asignar control a un usuario
+     */
+    public function asignarControlUsuario(): void
+    {
+        $admin = $this->checkAuth();
+        if (!$admin) return;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect('admin/usuarios');
+            return;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token de seguridad inválido';
+            redirect('admin/usuarios');
+            return;
+        }
+
+        $controlId = intval($_POST['control_id'] ?? 0);
+        $usuarioId = intval($_POST['usuario_id'] ?? 0);
+
+        $control = Control::findById($controlId);
+        $usuario = Usuario::findById($usuarioId);
+
+        if (!$control || !$usuario) {
+            $_SESSION['error'] = 'Datos inválidos';
+            redirect('admin/gestionar-controles-usuario?id=' . $usuarioId);
+            return;
+        }
+
+        // Obtener apartamento_usuario_id del usuario
+        $sql = "SELECT id FROM apartamento_usuario WHERE usuario_id = ? AND activo = 1 LIMIT 1";
+        $apartamentoUsuario = Database::fetchOne($sql, [$usuarioId]);
+
+        if (!$apartamentoUsuario) {
+            $_SESSION['error'] = 'El usuario no tiene un apartamento asignado';
+            redirect('admin/gestionar-controles-usuario?id=' . $usuarioId);
+            return;
+        }
+
+        if ($control->asignar($apartamentoUsuario['id'], $admin->id)) {
+            $_SESSION['success'] = 'Control asignado correctamente';
+            writeLog("Control {$control->numero_control_completo} asignado al usuario {$usuario->email} por admin {$admin->email}", 'info');
+        } else {
+            $_SESSION['error'] = 'Error al asignar el control';
+        }
+
+        redirect('admin/gestionar-controles-usuario?id=' . $usuarioId);
     }
 
     /**
@@ -2304,18 +2407,6 @@ class AdminController
         exit;
     }
 
-    /**
-     * Gestión de solicitudes de cambios (igual que operadores)
-     */
-    public function solicitudes(): void
-    {
-        $usuario = $this->checkAuth();
-        if (!$usuario) return;
-
-        $solicitudes = $this->getSolicitudesPendientes();
-
-        require_once __DIR__ . '/../views/operador/solicitudes.php';
-    }
 
     /**
      * Aprobar/rechazar solicitud (igual que operadores)
@@ -2615,5 +2706,211 @@ class AdminController
         }
 
         redirect('admin/perfil');
+    }
+
+    // ==================== GESTIÓN DE SOLICITUDES ====================
+
+    /**
+     * Gestión de solicitudes
+     */
+    public function solicitudes(): void
+    {
+        $usuario = $this->checkAuth();
+        if (!$usuario) return;
+
+        // Obtener TODAS las solicitudes pendientes, no solo las de registro
+        $solicitudesPendientes = SolicitudCambio::getPendientes();
+
+        require_once __DIR__ . '/../views/admin/solicitudes/index.php';
+    }
+
+    /**
+     * Aprobar solicitud
+     */
+    public function aprobarSolicitud(): void
+    {
+        $admin = $this->checkAuth();
+        if (!$admin) {
+            echo json_encode(['success' => false, 'message' => 'No autorizado']);
+            exit;
+        }
+
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'message' => 'Método no permitido']);
+            exit;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido']);
+            exit;
+        }
+
+        $solicitudId = (int)($_POST['solicitud_id'] ?? 0);
+
+        if ($solicitudId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID de solicitud inválido']);
+            exit;
+        }
+
+        $solicitud = SolicitudCambio::findById($solicitudId);
+
+        if (!$solicitud) {
+            echo json_encode(['success' => false, 'message' => 'Solicitud no encontrada']);
+            exit;
+        }
+
+        if ($solicitud->aprobar($admin->id, null)) {
+            echo json_encode(['success' => true, 'message' => 'Solicitud aprobada exitosamente']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error al aprobar la solicitud']);
+        }
+        exit;
+    }
+
+    /**
+     * Aprobar solicitud de registro con asignación manual de controles
+     */
+    public function aprobarSolicitudRegistro(): void
+    {
+        $admin = $this->checkAuth();
+        if (!$admin) {
+            echo json_encode(['success' => false, 'message' => 'No autorizado']);
+            exit;
+        }
+
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'message' => 'Método no permitido']);
+            exit;
+        }
+
+        // Leer datos JSON del body
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($data['csrf_token'] ?? '')) {
+            echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido']);
+            exit;
+        }
+
+        $solicitudId = (int)($data['solicitud_id'] ?? 0);
+
+        if ($solicitudId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID de solicitud inválido']);
+            exit;
+        }
+
+        $solicitud = SolicitudCambio::findById($solicitudId);
+
+        if (!$solicitud) {
+            echo json_encode(['success' => false, 'message' => 'Solicitud no encontrada']);
+            exit;
+        }
+
+        if ($solicitud->tipo_solicitud !== 'registro_nuevo_usuario') {
+            echo json_encode(['success' => false, 'message' => 'Esta función solo es válida para solicitudes de registro de nuevos usuarios']);
+            exit;
+        }
+
+        // Preparar datos de asignación
+        $datosAsignacion = [
+            'cantidad_controles' => intval($data['cantidad_controles'] ?? 0),
+            'controles' => $data['controles'] ?? [],
+            'bloque' => sanitize($data['bloque'] ?? ''),
+            'escalera' => sanitize($data['escalera'] ?? ''),
+            'apartamento' => sanitize($data['apartamento'] ?? ''),
+            'piso' => intval($data['piso'] ?? 0)
+        ];
+
+        // Validaciones
+        if ($datosAsignacion['cantidad_controles'] <= 0 || $datosAsignacion['cantidad_controles'] > 10) {
+            echo json_encode(['success' => false, 'message' => 'La cantidad de controles debe estar entre 1 y 10']);
+            exit;
+        }
+
+        if (count($datosAsignacion['controles']) !== $datosAsignacion['cantidad_controles']) {
+            echo json_encode(['success' => false, 'message' => 'La cantidad de controles seleccionados no coincide con la cantidad especificada']);
+            exit;
+        }
+
+        if (empty($datosAsignacion['bloque']) || empty($datosAsignacion['escalera']) || empty($datosAsignacion['apartamento'])) {
+            echo json_encode(['success' => false, 'message' => 'Los datos del apartamento son obligatorios']);
+            exit;
+        }
+
+        try {
+            $usuarioId = $solicitud->crearUsuarioConAsignacionManual($admin->id, $datosAsignacion);
+
+            if ($usuarioId) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Usuario creado exitosamente y controles asignados',
+                    'usuario_id' => $usuarioId
+                ]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Error al crear el usuario']);
+            }
+        } catch (Exception $e) {
+            writeLog("Error en aprobarSolicitudRegistro: " . $e->getMessage(), 'error');
+            echo json_encode(['success' => false, 'message' => 'Error interno del servidor']);
+        }
+        exit;
+    }
+
+    /**
+     * Rechazar solicitud
+     */
+    public function rechazarSolicitud(): void
+    {
+        $admin = $this->checkAuth();
+        if (!$admin) {
+            echo json_encode(['success' => false, 'message' => 'No autorizado']);
+            exit;
+        }
+
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'message' => 'Método no permitido']);
+            exit;
+        }
+
+        // Validar CSRF
+        if (!ValidationHelper::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+            echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido']);
+            exit;
+        }
+
+        $solicitudId = (int)($_POST['solicitud_id'] ?? 0);
+        $motivo = trim($_POST['motivo'] ?? '');
+
+        if ($solicitudId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID de solicitud inválido']);
+            exit;
+        }
+
+        if (empty($motivo)) {
+            echo json_encode(['success' => false, 'message' => 'Debe proporcionar un motivo de rechazo']);
+            exit;
+        }
+
+        $solicitud = SolicitudCambio::findById($solicitudId);
+
+        if (!$solicitud) {
+            echo json_encode(['success' => false, 'message' => 'Solicitud no encontrada']);
+            exit;
+        }
+
+        if ($solicitud->rechazar($admin->id, $motivo)) {
+            echo json_encode(['success' => true, 'message' => 'Solicitud rechazada']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error al rechazar la solicitud']);
+        }
+        exit;
     }
 }
