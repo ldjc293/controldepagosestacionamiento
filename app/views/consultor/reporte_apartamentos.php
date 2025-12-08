@@ -34,12 +34,12 @@ require_once __DIR__ . '/../layouts/header.php';
                 <!-- Filtros -->
                 <form method="GET" class="row g-3 mb-4">
                     <div class="col-md-3">
-                        <label class="form-label">Torre</label>
+                        <label class="form-label">Bloque</label>
                         <select name="torre" class="form-select form-select-sm">
                             <option value="">Todas</option>
-                            <?php for ($t = 27; $t <= 32; $t++): ?>
-                                <option value="<?= $t ?>" <?= ($_GET['torre'] ?? '') == $t ? 'selected' : '' ?>>Torre <?= $t ?></option>
-                            <?php endfor; ?>
+                            <?php foreach (($bloques ?? []) as $t): ?>
+                                <option value="<?= $t ?>" <?= ($_GET['torre'] ?? '') == $t ? 'selected' : '' ?>>Bloque <?= $t ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -116,7 +116,7 @@ require_once __DIR__ . '/../layouts/header.php';
                             <table class="table table-sm">
                                 <thead>
                                     <tr>
-                                        <th>Torre</th>
+                                        <th>Bloque</th>
                                         <th>Total Aptos</th>
                                         <th>Con Residentes</th>
                                         <th>Controles Asignados</th>
@@ -127,7 +127,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                 <tbody>
                                     <?php foreach ($resumenTorres ?? [] as $torre): ?>
                                         <tr>
-                                            <td><strong>Torre <?= $torre['torre'] ?></strong></td>
+                                            <td><strong>Bloque <?= $torre['torre'] ?></strong></td>
                                             <td><?= $torre['total_aptos'] ?></td>
                                             <td><span class="badge bg-success"><?= $torre['con_residentes'] ?></span></td>
                                             <td><span class="badge bg-info"><?= $torre['controles_asignados'] ?></span></td>
@@ -160,7 +160,8 @@ require_once __DIR__ . '/../layouts/header.php';
                         <table class="table table-hover table-sm" id="tableApartamentos">
                             <thead>
                                 <tr>
-                                    <th>Torre</th>
+                                    <th>Bloque</th>
+                                    <th>Escalera</th>
                                     <th>Apartamento</th>
                                     <th>Residente Principal</th>
                                     <th>Contacto</th>
@@ -173,12 +174,13 @@ require_once __DIR__ . '/../layouts/header.php';
                             <tbody>
                                 <?php foreach ($apartamentos as $apto): ?>
                                     <tr>
-                                        <td><strong>Torre <?= $apto['torre'] ?></strong></td>
+                                        <td><strong>Bloque <?= $apto['torre'] ?></strong></td>
+                                        <td><span class="badge bg-light text-dark"><?= $apto['escalera'] ?></span></td>
                                         <td><span class="badge bg-secondary"><?= $apto['numero_apartamento'] ?></span></td>
                                         <td>
                                             <?php if ($apto['residente_nombre']): ?>
-                                                <strong><?= htmlspecialchars($apto['residente_nombre']) ?></strong><br>
-                                                <small class="text-muted"><?= htmlspecialchars($apto['cedula']) ?></small>
+                                                <strong><?= htmlspecialchars($apto['residente_nombre'] ?? '') ?></strong><br>
+                                                <small class="text-muted"><?= htmlspecialchars($apto['cedula'] ?? '') ?></small>
                                             <?php else: ?>
                                                 <span class="text-muted">Sin residente</span>
                                             <?php endif; ?>
@@ -186,9 +188,9 @@ require_once __DIR__ . '/../layouts/header.php';
                                         <td>
                                             <?php if ($apto['email']): ?>
                                                 <small>
-                                                    <i class="bi bi-envelope"></i> <?= htmlspecialchars($apto['email']) ?><br>
+                                                    <i class="bi bi-envelope"></i> <?= htmlspecialchars($apto['email'] ?? '') ?><br>
                                                     <?php if ($apto['telefono']): ?>
-                                                        <i class="bi bi-phone"></i> <?= htmlspecialchars($apto['telefono']) ?>
+                                                        <i class="bi bi-phone"></i> <?= htmlspecialchars($apto['telefono'] ?? '') ?>
                                                     <?php endif; ?>
                                                 </small>
                                             <?php else: ?>

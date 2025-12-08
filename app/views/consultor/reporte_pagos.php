@@ -68,12 +68,12 @@ require_once __DIR__ . '/../layouts/header.php';
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">Torre</label>
+                        <label class="form-label">Bloque</label>
                         <select name="torre" class="form-select form-select-sm">
                             <option value="">Todas</option>
-                            <?php for ($t = 27; $t <= 32; $t++): ?>
-                                <option value="<?= $t ?>" <?= ($_GET['torre'] ?? '') == $t ? 'selected' : '' ?>>Torre <?= $t ?></option>
-                            <?php endfor; ?>
+                            <?php foreach (($bloques ?? []) as $t): ?>
+                                <option value="<?= $t ?>" <?= ($_GET['torre'] ?? '') == $t ? 'selected' : '' ?>>Bloque <?= $t ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-2">
@@ -177,7 +177,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                         <td><span class="badge bg-secondary">#<?= str_pad($pago['id'], 5, '0', STR_PAD_LEFT) ?></span></td>
                                         <td><small><?= date('d/m/Y', strtotime($pago['fecha_pago'])) ?></small></td>
                                         <td><strong><?= htmlspecialchars($pago['cliente_nombre']) ?></strong></td>
-                                        <td><span class="badge bg-info">T<?= $pago['torre'] ?>-<?= $pago['apartamento'] ?></span></td>
+                                        <td><span class="badge bg-info">Blq<?= $pago['torre'] ?>-<?= $pago['apartamento'] ?></span></td>
                                         <td>
                                             <strong>
                                                 <?php if ($pago['moneda_pago'] === 'usd_efectivo'): ?>
@@ -208,7 +208,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                         </td>
                                         <td>
                                             <?php if ($pago['aprobado_por']): ?>
-                                                <small>Op. #<?= $pago['aprobado_por'] ?></small>
+                                                <small><i class="bi bi-person-check"></i> <?= htmlspecialchars($pago['operador_nombre'] ?? 'Operador #' . $pago['aprobado_por']) ?></small>
                                             <?php else: ?>
                                                 <span class="text-muted">-</span>
                                             <?php endif; ?>

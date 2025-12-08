@@ -115,13 +115,20 @@ require_once __DIR__ . '/../layouts/header.php';
                                                 <div class="d-flex flex-wrap gap-1">
                                                     <?php
                                                     $contadores = ['pendientes' => 0, 'futuras' => 0];
+                                                    $hoy = new DateTime();
+                                                    $mesActual = (int)$hoy->format('n');
+                                                    $anioActual = (int)$hoy->format('Y');
 
                                                     foreach ($mensualidadesPendientes as $m) {
                                                         $fechaVencimiento = new DateTime($m->fecha_vencimiento);
-                                                        $hoy = new DateTime();
-                                                        if ($fechaVencimiento > $hoy) {
+                                                        $mesVencimiento = (int)$fechaVencimiento->format('n');
+                                                        $anioVencimiento = (int)$fechaVencimiento->format('Y');
+
+                                                        if ($anioVencimiento > $anioActual || ($anioVencimiento === $anioActual && $mesVencimiento > $mesActual)) {
+                                                            // Mes futuro
                                                             $contadores['futuras']++;
                                                         } else {
+                                                            // Mes actual o anterior (pendiente/vencido)
                                                             $contadores['pendientes']++;
                                                         }
                                                     }
@@ -169,8 +176,26 @@ require_once __DIR__ . '/../layouts/header.php';
                                                 <?php foreach ($mensualidadesPendientes as $index => $mensualidad):
                                                     $fechaVencimiento = new DateTime($mensualidad->fecha_vencimiento);
                                                     $hoy = new DateTime();
-                                                    $esFutura = $fechaVencimiento > $hoy;
-                                                    $esVencido = $mensualidad->estado === 'vencido';
+
+                                                    // Determinar el tipo basado en el mes, no solo la fecha
+                                                    $mesVencimiento = (int)$fechaVencimiento->format('n');
+                                                    $anioVencimiento = (int)$fechaVencimiento->format('Y');
+                                                    $mesActual = (int)$hoy->format('n');
+                                                    $anioActual = (int)$hoy->format('Y');
+
+                                                    if ($anioVencimiento < $anioActual || ($anioVencimiento === $anioActual && $mesVencimiento < $mesActual)) {
+                                                        // Mes anterior al actual
+                                                        $esFutura = false;
+                                                        $esVencido = $fechaVencimiento < $hoy; // Solo vencido si fecha específica ya pasó
+                                                    } elseif ($anioVencimiento === $anioActual && $mesVencimiento === $mesActual) {
+                                                        // Mes actual - siempre pendiente
+                                                        $esFutura = false;
+                                                        $esVencido = false;
+                                                    } else {
+                                                        // Mes futuro
+                                                        $esFutura = true;
+                                                        $esVencido = false;
+                                                    }
                                                 ?>
 
                                                     <div class="col-md-6 col-lg-4">
@@ -180,7 +205,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                                              <?= !$esFutura && !$esVencido ? 'border-success' : '' ?>
                                                              mensualidad-item"
                                                              data-monto="<?= $mensualidad->monto_usd ?>"
-                                                             data-tipo="<?= $esFutura ? 'futuro' : 'pendiente' ?>"
+                                                             data-tipo="<?= $esFutura ? 'futuro' : ($esVencido ? 'vencido' : 'pendiente') ?>"
                                                              data-mes="<?= date('Y-m', strtotime($mensualidad->mes_correspondiente)) ?>">
 
                                                             <!-- Status Badge -->

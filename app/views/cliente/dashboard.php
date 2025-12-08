@@ -46,6 +46,82 @@ require_once __DIR__ . '/../layouts/header.php';
             </div>
         <?php endif; ?>
 
+        <!-- DEBUG: Información detallada de mensualidades -->
+        <?php if (isset($_GET['debug']) && $_GET['debug'] === 'mensualidades'): ?>
+            <div class="alert alert-info">
+                <h5>🔍 DEBUG: Información detallada de mensualidades</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>📊 Todas las mensualidades del usuario:</h6>
+                        <?php
+                        $sqlTodas = "SELECT m.id, m.mes, m.anio, m.estado, m.fecha_vencimiento,
+                                    CONCAT(m.anio, '-', LPAD(m.mes, 2, '0'), '-01') as mes_correspondiente
+                             FROM mensualidades m
+                             JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
+                             WHERE au.usuario_id = ? AND au.activo = TRUE
+                             ORDER BY m.fecha_vencimiento";
+
+                        $todasMensualidades = Database::fetchAll($sqlTodas, [$_SESSION['user_id']]);
+                        ?>
+                        <table class="table table-sm table-bordered">
+                            <thead><tr><th>ID</th><th>Mes/Año</th><th>Estado</th><th>Vencida</th><th>¿Pago?</th></tr></thead>
+                            <tbody>
+                                <?php foreach ($todasMensualidades as $m): ?>
+                                    <?php
+                                    $fechaVencimiento = strtotime($m['fecha_vencimiento']);
+                                    $estaVencida = $fechaVencimiento < time();
+
+                                    $sqlPago = "SELECT COUNT(DISTINCT p.id) as tiene_pago
+                                                FROM pago_mensualidad pm
+                                                JOIN pagos p ON p.id = pm.pago_id
+                                                WHERE pm.mensualidad_id = ?
+                                                  AND p.estado_comprobante IN ('aprobado', 'no_aplica')";
+
+                                    $resultadoPago = Database::fetchOne($sqlPago, [$m['id']]);
+                                    $tienePago = $resultadoPago && $resultadoPago['tiene_pago'] > 0;
+                                    ?>
+                                    <tr>
+                                        <td><?=$m['id']?></td>
+                                        <td><?=$m['mes']?>/<?=$m['anio']?></td>
+                                        <td><?=$m['estado']?></td>
+                                        <td><?=$estaVencida ? '⚠️ SÍ' : '✅ NO'?></td>
+                                        <td><?=$tienePago ? '✅ SÍ' : '❌ NO'?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>🎯 Mensualidades que aparecen en dashboard:</h6>
+                        <p><strong>Total mostradas:</strong> <?= count($mensualidadesPendientes) ?></p>
+                        <table class="table table-sm table-bordered">
+                            <thead><tr><th>ID</th><th>Mes/Año</th><th>¿Mes Actual?</th><th>¿Vencida?</th><th>Razón</th></tr></thead>
+                            <tbody>
+                                <?php
+                                $mesActual = date('Y-m');
+                                foreach ($mensualidadesPendientes as $m):
+                                    $fechaVencimiento = strtotime($m->fecha_vencimiento);
+                                    $mesVencimiento = date('Y-m', $fechaVencimiento);
+                                    $esMesActual = $mesVencimiento === $mesActual;
+                                    $estaVencida = $fechaVencimiento < time();
+                                    $razon = $esMesActual ? 'Mes actual' : 'Vencida';
+                                ?>
+                                    <tr>
+                                        <td><?=$m->id?></td>
+                                        <td><?=$m->mes?>/<?=$m->anio?></td>
+                                        <td><?=$esMesActual ? '✅ SÍ' : '❌ NO'?></td>
+                                        <td><?=$estaVencida ? '⚠️ SÍ' : '✅ NO'?></td>
+                                        <td><?=$razon?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <p><strong>Fecha actual:</strong> <?= date('Y-m-d H:i:s') ?> (Mes actual: <?=$mesActual?>)</p>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+
         <!-- Estadísticas Principales -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -142,12 +218,19 @@ require_once __DIR__ . '/../layouts/header.php';
         </td>
         <td><?= formatUSD($mensualidad->monto_usd ?? 0) ?></td>
         <td>
-            <?php if (($mensualidad->estado ?? '') === 'pagada'): ?>
+            <?php
+            $fechaVencimiento = strtotime($mensualidad->fecha_vencimiento ?? '');
+            $mesActual = date('Y-m');
+            $mesVencimiento = date('Y-m', $fechaVencimiento);
+
+            if (($mensualidad->estado ?? '') === 'pagada'): ?>
                 <span class="badge bg-success">Pagada</span>
-            <?php elseif (($mensualidad->estado ?? '') === 'vencida'): ?>
+            <?php elseif (($mensualidad->estado ?? '') === 'vencida' || $fechaVencimiento < time()): ?>
                 <span class="badge bg-danger">Vencida</span>
-            <?php else: ?>
+            <?php elseif ($mesVencimiento === $mesActual): ?>
                 <span class="badge bg-warning">Pendiente</span>
+            <?php else: ?>
+                <span class="badge bg-info">Próxima</span>
             <?php endif; ?>
         </td>
         <td><?= date('d/m/Y', strtotime($mensualidad->fecha_vencimiento ?? '')) ?></td>

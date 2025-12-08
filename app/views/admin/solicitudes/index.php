@@ -5,19 +5,8 @@
  * Muestra todas las solicitudes pendientes de todos los tipos
  */
 
-// Definir constantes de tipos de solicitud
-const TIPOS_SOLICITUD = [
-    'registro_nuevo_usuario' => 'Registro Nuevo Usuario',
-    'cambio_cantidad_controles' => 'Cambio Cantidad Controles',
-    'suspension_control' => 'Suspensión Control',
-    'desactivacion_control' => 'Desactivación Control',
-    'desincorporar_control' => 'Desincorporar Control',
-    'reportar_perdido' => 'Reportar Control Perdido',
-    'agregar_control' => 'Agregar Control',
-    'comprar_control' => 'Comprar Control',
-    'solicitud_personalizada' => 'Solicitud Personalizada',
-    'cambio_estado_control' => 'Cambio Estado Control'
-];
+// Incluir helper de tipos de solicitud
+require_once __DIR__ . '/../../../helpers/SolicitudHelper.php';
 
 // Verificar autenticación
 if (!isset($_SESSION['user_id'])) {
@@ -65,7 +54,7 @@ require_once __DIR__ . '/../../layouts/topbar.php';
                                                 <td><?= $solicitud->id ?></td>
                                                 <td>
                                                     <span class="badge bg-<?= getBadgeColorForTipo($solicitud->tipo_solicitud) ?>">
-                                                        <?= TIPOS_SOLICITUD[$solicitud->tipo_solicitud] ?? $solicitud->tipo_solicitud ?>
+                                                        <?= SolicitudHelper::getLabel($solicitud->tipo_solicitud) ?>
                                                     </span>
                                                 </td>
                                                 <td>
@@ -109,7 +98,7 @@ require_once __DIR__ . '/../../layouts/topbar.php';
                                                         <small>Controles: <?= $datos['cantidad_controles'] ?></small>
                                                     <?php elseif ($solicitud->tipo_solicitud === 'cambio_cantidad_controles'): ?>
                                                         <small>Nueva cantidad: <?= $solicitud->cantidad_controles_nueva ?></small>
-                                                    <?php elseif (in_array($solicitud->tipo_solicitud, ['suspension_control', 'desactivacion_control'])): ?>
+                                                    <?php elseif (in_array($solicitud->tipo_solicitud, ['suspension_control', 'desactivacion_control', 'desincorporar_control', 'reportar_perdido'])): ?>
                                                         <?php
                                                         $sql = "SELECT numero_control_completo FROM controles_estacionamiento WHERE id = ?";
                                                         $control = Database::fetchOne($sql, [$solicitud->control_id]);
@@ -217,19 +206,8 @@ function getBadgeColorForTipo($tipo) {
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
-// Definir constantes de tipos de solicitud para JavaScript
-const TIPOS_SOLICITUD = {
-    'registro_nuevo_usuario': 'Registro Nuevo Usuario',
-    'cambio_cantidad_controles': 'Cambio Cantidad Controles',
-    'suspension_control': 'Suspensión Control',
-    'desactivacion_control': 'Desactivación Control',
-    'desincorporar_control': 'Desincorporar Control',
-    'reportar_perdido': 'Reportar Control Perdido',
-    'agregar_control': 'Agregar Control',
-    'comprar_control': 'Comprar Control',
-    'solicitud_personalizada': 'Solicitud Personalizada',
-    'cambio_estado_control': 'Cambio Estado Control'
-};
+// Definir constantes de tipos de solicitud para JavaScript usando el helper
+const TIPOS_SOLICITUD_JS = <?= json_encode(SolicitudHelper::getTiposSolicitud()) ?>;
 
 const solicitudesData = <?= json_encode(array_map(function($s) {
     $data = [
@@ -253,7 +231,7 @@ const solicitudesData = <?= json_encode(array_map(function($s) {
         
         if ($s->tipo_solicitud === 'cambio_cantidad_controles') {
             $data['cantidad_nueva'] = $s->cantidad_controles_nueva;
-        } elseif (in_array($s->tipo_solicitud, ['suspension_control', 'desactivacion_control'])) {
+        } elseif (in_array($s->tipo_solicitud, ['suspension_control', 'desactivacion_control', 'desincorporar_control', 'reportar_perdido'])) {
             $sql = "SELECT numero_control_completo FROM controles_estacionamiento WHERE id = ?";
             $control = Database::fetchOne($sql, [$s->control_id]);
             $data['control'] = $control['numero_control_completo'] ?? 'N/A';
@@ -309,7 +287,7 @@ function verDetalles(id) {
             </div>
             <div class="col-12 mt-3">
                 <h6>Detalles de la Solicitud</h6>
-                <p><strong>Tipo:</strong> ${TIPOS_SOLICITUD[solicitud.tipo] || solicitud.tipo}</p>
+                <p><strong>Tipo:</strong> ${TIPOS_SOLICITUD_JS[solicitud.tipo] || solicitud.tipo}</p>
         `;
         
         if (solicitud.tipo === 'cambio_cantidad_controles') {

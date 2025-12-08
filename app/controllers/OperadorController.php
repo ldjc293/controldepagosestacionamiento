@@ -887,24 +887,25 @@ class OperadorController
      */
     private function getSolicitudesPendientes(): array
     {
-        $sql = "SELECT s.*, 
-                       u.nombre_completo as solicitante_nombre,
-                       u.email as solicitante_email,
-                       u.telefono as solicitante_telefono,
-                       a.bloque as apartamento_bloque,
-                       a.escalera as apartamento_escalera,
-                       a.piso as apartamento_piso,
-                       a.numero_apartamento as apartamento_numero,
-                       c.numero_control_completo as control_numero,
-                       c.estado as control_estado,
-                       c.fecha_asignacion as control_fecha_asignacion
-                FROM solicitudes_cambios s
-                JOIN apartamento_usuario au ON au.id = s.apartamento_usuario_id
-                JOIN usuarios u ON u.id = au.usuario_id
-                JOIN apartamentos a ON a.id = au.apartamento_id
-                LEFT JOIN controles_estacionamiento c ON c.id = s.control_id
-                WHERE s.estado = 'pendiente'
-                ORDER BY s.fecha_solicitud DESC";
+        $sql = "SELECT s.id, s.tipo_solicitud, s.cantidad_controles_nueva, s.control_id, s.motivo,
+                        s.estado, s.fecha_solicitud, s.aprobado_por, s.fecha_respuesta, s.observaciones,
+                        u.nombre_completo as solicitante_nombre,
+                        u.email as solicitante_email,
+                        u.telefono as solicitante_telefono,
+                        a.bloque as apartamento_bloque,
+                        a.escalera as apartamento_escalera,
+                        a.piso as apartamento_piso,
+                        a.numero_apartamento as apartamento_numero,
+                        c.numero_control_completo as control_numero,
+                        c.estado as control_estado,
+                        c.fecha_asignacion as control_fecha_asignacion
+                 FROM solicitudes_cambios s
+                 JOIN apartamento_usuario au ON au.id = s.apartamento_usuario_id
+                 JOIN usuarios u ON u.id = au.usuario_id
+                 JOIN apartamentos a ON a.id = au.apartamento_id
+                 LEFT JOIN controles_estacionamiento c ON c.id = s.control_id
+                 WHERE s.estado = 'pendiente'
+                 ORDER BY s.fecha_solicitud DESC";
 
         return Database::fetchAll($sql);
     }

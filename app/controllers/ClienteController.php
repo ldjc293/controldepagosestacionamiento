@@ -43,8 +43,15 @@ class ClienteController
         $usuario = $this->checkAuth();
         if (!$usuario) return;
 
-        // Obtener mensualidades pendientes (solo vencidas)
-        $mensualidadesPendientes = Mensualidad::getPendientesByUsuario($usuario->id, false);
+        // Obtener mensualidades vencidas + mes actual (que requieren atención inmediata)
+        $todasMensualidadesPendientes = Mensualidad::getPendientesByUsuario($usuario->id, false);
+        $mesActual = date('Y-m');
+        $mensualidadesPendientes = array_filter($todasMensualidadesPendientes, function($m) use ($mesActual) {
+            $fechaVencimiento = strtotime($m->fecha_vencimiento);
+            $mesVencimiento = date('Y-m', $fechaVencimiento);
+            // Incluir: mes actual (siempre) + meses vencidos que no sean del mes actual
+            return $mesVencimiento === $mesActual || ($fechaVencimiento < time() && $mesVencimiento !== $mesActual);
+        });
 
         // Calcular deuda total
         $deudaInfo = Mensualidad::calcularDeudaTotal($usuario->id);
@@ -167,6 +174,41 @@ class ClienteController
             $_SESSION['error'] = 'Debe seleccionar al menos una mensualidad';
             redirect('cliente/registrar-pago');
             return;
+        }
+
+        // VALIDACIÓN CRÍTICA: Verificar que las mensualidades seleccionadas sean consecutivas desde la más antigua pendiente
+        // Esto previene que los clientes salten meses manipulando el formulario
+        $mensualidadesPermitidas = Mensualidad::getMensualidadesParaPagoAdelantado($usuario->id, 12);
+        $idsPermitidos = array_map(fn($m) => $m->id, $mensualidadesPermitidas);
+
+        // Verificar que TODAS las mensualidades seleccionadas estén en la lista permitida
+        foreach ($mensualidadesSeleccionadas as $mensualidadId) {
+            if (!in_array($mensualidadId, $idsPermitidos)) {
+                writeLog("Intento de pago no autorizado: Usuario {$usuario->id} intentó pagar mensualidad ID {$mensualidadId} que no está en la lista permitida", 'warning');
+                $_SESSION['error'] = 'No puede saltarse mensualidades. Debe pagar desde la mensualidad más antigua pendiente.';
+                redirect('cliente/registrar-pago');
+                return;
+            }
+        }
+
+        // Verificar que las mensualidades seleccionadas sean consecutivas (sin saltos)
+        $indicesSeleccionados = [];
+        foreach ($mensualidadesSeleccionadas as $mensualidadId) {
+            $indice = array_search($mensualidadId, $idsPermitidos);
+            if ($indice !== false) {
+                $indicesSeleccionados[] = $indice;
+            }
+        }
+
+        // Verificar que los índices sean consecutivos desde el inicio
+        sort($indicesSeleccionados);
+        for ($i = 0; $i < count($indicesSeleccionados); $i++) {
+            if ($indicesSeleccionados[$i] !== $i) {
+                writeLog("Intento de pago con saltos: Usuario {$usuario->id} seleccionó índices no consecutivos: " . implode(',', $indicesSeleccionados), 'warning');
+                $_SESSION['error'] = 'Debe seleccionar mensualidades consecutivas desde la más antigua pendiente.';
+                redirect('cliente/registrar-pago');
+                return;
+            }
         }
 
         // Validar que se suba comprobante para métodos que lo requieren

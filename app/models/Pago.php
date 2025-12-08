@@ -192,6 +192,21 @@ class Pago
     }
 
     /**
+     * Marcar mensualidades asociadas como pagadas (para pagos aprobados)
+     */
+    private function marcarMensualidadesComoPagadas(): void
+    {
+        $sql = "UPDATE mensualidades m
+                JOIN pago_mensualidad pm ON pm.mensualidad_id = m.id
+                SET m.estado = 'pagada'
+                WHERE pm.pago_id = ? AND m.estado != 'pagada'";
+
+        Database::execute($sql, [$this->id]);
+
+        writeLog("Mensualidades marcadas como pagadas para pago ID: {$this->id}", 'info');
+    }
+
+    /**
      * Aprobar comprobante de pago
      *
      * @param int $aprobadoPor ID del usuario que aprueba
@@ -209,6 +224,9 @@ class Pago
                     WHERE id = ?";
 
             Database::execute($sql, [$aprobadoPor, $this->id]);
+
+            // Marcar mensualidades asociadas como pagadas
+            $this->marcarMensualidadesComoPagadas();
 
             // Generar recibo PDF
             $this->generarRecibo();

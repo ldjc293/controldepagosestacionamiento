@@ -486,7 +486,7 @@ if (isset($_SESSION['user_id'])) {
         session_destroy();
         session_start();
 
-        $_SESSION['warning'] = $timeoutMessage;
+        $_SESSION['error'] = $timeoutMessage;
 
         // Redirigir al login
         header('Location: ' . url('auth/login?timeout=1'));

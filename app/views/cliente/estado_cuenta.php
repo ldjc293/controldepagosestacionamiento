@@ -99,32 +99,47 @@ require_once __DIR__ . '/../layouts/header.php';
                                 </thead>
                                 <tbody>
                                     <?php foreach ($mensualidades as $mensualidad): ?>
-                                        <tr data-estado="<?= $mensualidad['estado'] ?>">
+                                        <?php
+                                        // Determinar el estado real basado en pagos aprobados y fecha de vencimiento
+                                        $estadoReal = $mensualidad['estado'];
+                                        $tienePagoAprobado = !empty($mensualidad['fecha_pago']);
+                                        $fechaVencimiento = strtotime($mensualidad['fecha_vencimiento']);
+                                        $estaVencida = $fechaVencimiento < time();
+
+                                        // Si tiene pago aprobado, mostrar como pagada
+                                        if ($tienePagoAprobado) {
+                                            $estadoReal = 'pagada';
+                                        }
+                                        // Si no tiene pago aprobado pero está vencida, mostrar como vencida
+                                        elseif ($estaVencida) {
+                                            $estadoReal = 'vencida';
+                                        }
+                                        ?>
+                                        <tr data-estado="<?= $estadoReal ?>">
                                             <td>
                                                 <strong><?= formatearMesAnio($mensualidad['mes'], $mensualidad['anio']) ?></strong>
                                             </td>
                                             <td><?= formatUSD($mensualidad['monto_usd']) ?></td>
                                             <td>
-                                                <?php if ($mensualidad['estado'] === 'pagada'): ?>
+                                                <?php if ($estadoReal === 'pagada'): ?>
                                                     <span class="badge bg-success">
                                                         <i class="bi bi-check-circle"></i> Pagada
                                                     </span>
-                                                <?php elseif ($mensualidad['estado'] === 'vencida'): ?>
+                                                <?php elseif ($estadoReal === 'vencida'): ?>
                                                     <span class="badge bg-danger">
                                                         <i class="bi bi-exclamation-triangle"></i> Vencida
                                                     </span>
                                                 <?php else: ?>
-                                                    <?php 
-                                                    $fechaVencimiento = strtotime($mensualidad['fecha_vencimiento']);
-                                                    $esFutura = $fechaVencimiento > time();
-                                                    ?>
-                                                    <?php if ($esFutura): ?>
-                                                        <span class="badge bg-info">
-                                                            <i class="bi bi-calendar"></i> Próximo
-                                                        </span>
-                                                    <?php else: ?>
+                                                    <?php
+                                                    $mesActual = date('Y-m');
+                                                    $mesVencimiento = date('Y-m', $fechaVencimiento);
+                                                    if ($mesVencimiento === $mesActual): ?>
                                                         <span class="badge bg-warning">
                                                             <i class="bi bi-clock"></i> Pendiente
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-secondary">
+                                                            <i class="bi bi-calendar"></i> Pendiente
                                                         </span>
                                                     <?php endif; ?>
                                                 <?php endif; ?>

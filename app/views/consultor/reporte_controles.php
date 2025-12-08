@@ -43,12 +43,12 @@ require_once __DIR__ . '/../layouts/header.php';
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Torre</label>
+                        <label class="form-label">Bloque</label>
                         <select name="torre" class="form-select form-select-sm">
                             <option value="">Todas</option>
-                            <?php for ($t = 27; $t <= 32; $t++): ?>
-                                <option value="<?= $t ?>" <?= ($_GET['torre'] ?? '') == $t ? 'selected' : '' ?>>Torre <?= $t ?></option>
-                            <?php endfor; ?>
+                            <?php foreach (($bloques ?? []) as $t): ?>
+                                <option value="<?= $t ?>" <?= ($_GET['torre'] ?? '') == $t ? 'selected' : '' ?>>Bloque <?= $t ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -115,14 +115,14 @@ require_once __DIR__ . '/../layouts/header.php';
                 <!-- Distribución por Torre -->
                 <div class="card mb-4">
                     <div class="card-header">
-                        <h6 class="mb-0">Distribución por Torre</h6>
+                        <h6 class="mb-0">Distribución por Bloque</h6>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
                             <table class="table table-sm">
                                 <thead>
                                     <tr>
-                                        <th>Torre</th>
+                                        <th>Bloque</th>
                                         <th>Total</th>
                                         <th>Asignados</th>
                                         <th>Bloqueados</th>
@@ -133,7 +133,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                 <tbody>
                                     <?php foreach ($distribucionTorres ?? [] as $torre): ?>
                                         <tr>
-                                            <td><strong>Torre <?= $torre['torre'] ?></strong></td>
+                                            <td><strong>Bloque <?= $torre['torre'] ?></strong></td>
                                             <td><?= $torre['total'] ?></td>
                                             <td><span class="badge bg-success"><?= $torre['asignados'] ?></span></td>
                                             <td><span class="badge bg-danger"><?= $torre['bloqueados'] ?></span></td>
@@ -188,14 +188,14 @@ require_once __DIR__ . '/../layouts/header.php';
                                     </td>
                                     <td>
                                         <?php if ($control['apartamento']): ?>
-                                            <span class="badge bg-dark">T<?= $control['torre'] ?>-<?= $control['apartamento'] ?></span>
+                                            <span class="badge bg-dark">Blq<?= $control['torre'] ?>-<?= $control['apartamento'] ?></span>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
                                         <?php if ($control['residente_nombre']): ?>
-                                            <small><?= htmlspecialchars($control['residente_nombre']) ?></small>
+                                            <small><?= htmlspecialchars($control['residente_nombre'] ?? '') ?></small>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
@@ -209,7 +209,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                     </td>
                                     <td>
                                         <?php if ($control['motivo_bloqueo']): ?>
-                                            <small class="text-danger"><?= htmlspecialchars($control['motivo_bloqueo']) ?></small>
+                                            <small class="text-danger"><?= htmlspecialchars($control['motivo_bloqueo'] ?? '') ?></small>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>

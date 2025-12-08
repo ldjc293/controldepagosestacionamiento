@@ -80,7 +80,7 @@ class Mensualidad
     }
 
     /**
-     * Obtener mensualidades pendientes de un usuario
+     * Obtener mensualidades pendientes de un usuario (incluyendo vencidas por fecha)
      *
      * @param int $usuarioId ID del usuario
      * @param bool $generarFuturas Si debe generar mensualidades futuras
@@ -88,19 +88,29 @@ class Mensualidad
      */
     public static function getPendientesByUsuario(int $usuarioId, bool $generarFuturas = true): array
     {
+        // Primero generar mensualidades retroactivas si faltan
+        self::generarMensualidadesRetroactivas($usuarioId);
+
         $sql = "SELECT m.*, au.cantidad_controles,
-                       CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento,
-                       t.tasa_usd_bs,
-                       CONCAT(m.anio, '-', LPAD(m.mes, 2, '0'), '-01') as mes_correspondiente
-                FROM mensualidades m
-                JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
-                JOIN apartamentos a ON a.id = au.apartamento_id
-                LEFT JOIN tasa_cambio_bcv t ON t.id = m.tasa_cambio_id
-                WHERE au.usuario_id = ?
-                  AND m.estado IN ('pendiente', 'vencido')
-                  AND m.fecha_vencimiento <= CURDATE()
-                  AND au.activo = TRUE
-                ORDER BY m.fecha_vencimiento ASC";
+                        CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento,
+                        t.tasa_usd_bs,
+                        CONCAT(m.anio, '-', LPAD(m.mes, 2, '0'), '-01') as mes_correspondiente
+                 FROM mensualidades m
+                 JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
+                 JOIN apartamentos a ON a.id = au.apartamento_id
+                 LEFT JOIN tasa_cambio_bcv t ON t.id = m.tasa_cambio_id
+                 WHERE au.usuario_id = ?
+                   AND au.activo = TRUE
+                   AND (
+                       m.estado IN ('pendiente', 'vencido') OR
+                       (m.fecha_vencimiento <= CURDATE() AND NOT EXISTS(
+                           SELECT 1 FROM pago_mensualidad pm
+                           JOIN pagos p ON p.id = pm.pago_id
+                           WHERE pm.mensualidad_id = m.id
+                             AND p.estado_comprobante IN ('aprobado', 'no_aplica')
+                       ))
+                   )
+                 ORDER BY m.fecha_vencimiento ASC";
 
         $results = Database::fetchAll($sql, [$usuarioId]);
         $mensualidades = array_map(fn($row) => self::hydrate($row), $results);
@@ -120,59 +130,99 @@ class Mensualidad
     }
 
     /**
-     * Obtener mensualidades para pagos adelantados (incluyendo futuras)
+     * Obtener mensualidades para pagos adelantados (consecutivas desde la más antigua pendiente)
+     * El cliente puede pagar múltiples meses consecutivos, pero NO puede saltarse mensualidades
+     * Genera mensualidades retroactivas si faltan meses pasados sin pago
      *
      * @param int $usuarioId ID del usuario
-     * @param int $mesesAdelante Número de meses futuros a incluir
+     * @param int $mesesAdelante Número máximo de meses consecutivos a permitir
      * @return array
      */
     public static function getMensualidadesParaPagoAdelantado(int $usuarioId, int $mesesAdelante = 6): array
     {
+        // Generar mensualidades retroactivas para meses pasados sin pago si es necesario
+        self::generarMensualidadesRetroactivas($usuarioId);
+
         // Primero generar mensualidades futuras si no existen
         self::generarMensualidadesFuturas($usuarioId, $mesesAdelante);
 
-        $sql = "SELECT m.*, au.cantidad_controles,
-                        CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento,
-                        t.tasa_usd_bs,
-                        CONCAT(m.anio, '-', LPAD(m.mes, 2, '0'), '-01') as mes_correspondiente
-                FROM mensualidades m
-                JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
-                JOIN apartamentos a ON a.id = au.apartamento_id
-                LEFT JOIN tasa_cambio_bcv t ON t.id = m.tasa_cambio_id
-                WHERE au.usuario_id = ?
-                  AND m.estado = 'pendiente'
-                  AND au.activo = TRUE
-                ORDER BY m.fecha_vencimiento ASC
-                LIMIT ?";
+        // Obtener todas las mensualidades del usuario ordenadas por fecha de vencimiento
+        $sqlTodas = "SELECT m.*, au.cantidad_controles,
+                            CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento,
+                            t.tasa_usd_bs,
+                            CONCAT(m.anio, '-', LPAD(m.mes, 2, '0'), '-01') as mes_correspondiente
+                     FROM mensualidades m
+                     JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
+                     JOIN apartamentos a ON a.id = au.apartamento_id
+                     LEFT JOIN tasa_cambio_bcv t ON t.id = m.tasa_cambio_id
+                     WHERE au.usuario_id = ?
+                       AND au.activo = TRUE
+                     ORDER BY m.fecha_vencimiento ASC";
 
-        $results = Database::fetchAll($sql, [$usuarioId, $mesesAdelante]);
+        $todasMensualidades = Database::fetchAll($sqlTodas, [$usuarioId]);
 
-        return array_map(fn($row) => self::hydrate($row), $results);
+        // Encontrar el índice de la primera mensualidad sin pago aprobado
+        $indicePrimeraPendiente = -1;
+        foreach ($todasMensualidades as $index => $mensualidad) {
+            // Verificar si tiene pago aprobado
+            $sqlPago = "SELECT COUNT(DISTINCT p.id) as tiene_pago
+                        FROM pago_mensualidad pm
+                        JOIN pagos p ON p.id = pm.pago_id
+                        WHERE pm.mensualidad_id = ?
+                          AND p.estado_comprobante IN ('aprobado', 'no_aplica')";
+
+            $resultadoPago = Database::fetchOne($sqlPago, [$mensualidad['id']]);
+            $tienePago = $resultadoPago && $resultadoPago['tiene_pago'] > 0;
+
+            // Si no tiene pago aprobado, marcar este índice como el inicio
+            if (!$tienePago) {
+                $indicePrimeraPendiente = $index;
+                break;
+            }
+        }
+
+        // Si no hay mensualidades pendientes, devolver array vacío
+        if ($indicePrimeraPendiente === -1) {
+            return [];
+        }
+
+        // Devolver las mensualidades consecutivas desde la primera pendiente, limitado al máximo especificado
+        $mensualidadesConsecutivas = array_slice($todasMensualidades, $indicePrimeraPendiente, $mesesAdelante);
+
+        return array_map(fn($row) => self::hydrate($row), $mensualidadesConsecutivas);
     }
 
     /**
      * Obtener mensualidades vencidas (para alertas)
+     * Considera mensualidades vencidas por fecha (fecha_vencimiento < CURDATE()) sin pago aprobado
      *
      * @param int $mesesMinimos Mínimo de meses vencidos
      * @return array
      */
     public static function getVencidas(int $mesesMinimos = 3): array
     {
+        // Subconsulta para obtener mensualidades vencidas por fecha sin pago aprobado
         $sql = "SELECT u.id as usuario_id, u.nombre_completo, u.email,
-                       COUNT(m.id) as meses_pendientes,
-                       SUM(m.monto_usd) as total_deuda_usd,
-                       SUM(m.monto_bs) as total_deuda_bs,
-                       MIN(m.fecha_vencimiento) as primer_mes_vencido
-                FROM mensualidades m
-                JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
-                JOIN usuarios u ON u.id = au.usuario_id
-                WHERE m.estado = 'vencido'
-                  AND au.activo = TRUE
-                  AND u.activo = TRUE
-                  AND u.exonerado = FALSE
-                GROUP BY u.id
-                HAVING meses_pendientes >= ?
-                ORDER BY meses_pendientes DESC";
+                        COUNT(m.id) as meses_pendientes,
+                        SUM(m.monto_usd) as total_deuda_usd,
+                        SUM(m.monto_bs) as total_deuda_bs,
+                        MIN(m.fecha_vencimiento) as primer_mes_vencido
+                 FROM mensualidades m
+                 JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
+                 JOIN usuarios u ON u.id = au.usuario_id
+                 WHERE m.fecha_vencimiento < CURDATE()
+                   AND au.activo = TRUE
+                   AND u.activo = TRUE
+                   AND u.exonerado = FALSE
+                   AND NOT EXISTS (
+                       SELECT 1 FROM pago_mensualidad pm
+                       JOIN pagos p ON p.id = pm.pago_id
+                       WHERE pm.mensualidad_id = m.id
+                         AND p.estado_comprobante IN ('aprobado', 'no_aplica')
+                   )
+                 GROUP BY u.id
+                 HAVING meses_pendientes >= ?
+                 ORDER BY meses_pendientes DESC";
 
         return Database::fetchAll($sql, [$mesesMinimos]);
     }
@@ -278,7 +328,7 @@ class Mensualidad
      */
     public function marcarComoPagada(): bool
     {
-        $sql = "UPDATE mensualidades SET estado = 'pagado' WHERE id = ?";
+        $sql = "UPDATE mensualidades SET estado = 'pagada' WHERE id = ?";
         return Database::execute($sql, [$this->id]) > 0;
     }
 
@@ -291,7 +341,7 @@ class Mensualidad
     public static function marcarVencidas(): int
     {
         $sql = "UPDATE mensualidades
-                SET estado = 'vencido'
+                SET estado = 'vencida'
                 WHERE estado = 'pendiente'
                   AND fecha_vencimiento < CURDATE()";
 
@@ -318,7 +368,7 @@ class Mensualidad
                     FROM apartamento_usuario au
                     JOIN mensualidades m ON m.apartamento_usuario_id = au.id
                     JOIN usuarios u ON u.id = au.usuario_id
-                    WHERE m.estado = 'vencido'
+                    WHERE m.estado = 'vencida'
                       AND au.activo = TRUE
                       AND u.activo = TRUE
                       AND u.exonerado = FALSE
@@ -334,7 +384,7 @@ class Mensualidad
                 $sqlUpdate = "UPDATE mensualidades
                               SET bloqueado = TRUE
                               WHERE apartamento_usuario_id = ?
-                                AND estado = 'vencido'";
+                                AND estado = 'vencida'";
                 Database::execute($sqlUpdate, [$moroso['id']]);
 
                 // Bloquear controles
@@ -370,26 +420,49 @@ class Mensualidad
      */
     public static function calcularDeudaTotal(int $usuarioId): array
     {
-        $sql = "SELECT
-                    COALESCE(SUM(m.monto_usd), 0) as total_usd,
-                    COALESCE(SUM(m.monto_bs), 0) as total_bs,
-                    COUNT(m.id) as meses_count
-                FROM mensualidades m
-                JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
-                WHERE au.usuario_id = ?
-                  AND m.estado IN ('pendiente', 'vencido')
-                  AND m.fecha_vencimiento <= CURDATE()
-                  AND au.activo = TRUE";
+        // Primero obtener todas las mensualidades del usuario
+        $sqlTodas = "SELECT m.*
+                     FROM mensualidades m
+                     JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
+                     WHERE au.usuario_id = ?
+                       AND au.activo = TRUE
+                     ORDER BY m.fecha_vencimiento";
 
-        $result = Database::fetchOne($sql, [$usuarioId]);
+        $todasMensualidades = Database::fetchAll($sqlTodas, [$usuarioId]);
+
+        $totalUsd = 0;
+        $totalBs = 0;
+        $mesesCount = 0;
+
+        foreach ($todasMensualidades as $mensualidad) {
+            // Verificar si tiene pago aprobado
+            $sqlPago = "SELECT COUNT(DISTINCT p.id) as tiene_pago
+                        FROM pago_mensualidad pm
+                        JOIN pagos p ON p.id = pm.pago_id
+                        WHERE pm.mensualidad_id = ?
+                          AND p.estado_comprobante IN ('aprobado', 'no_aplica')";
+
+            $resultadoPago = Database::fetchOne($sqlPago, [$mensualidad['id']]);
+            $tienePago = $resultadoPago && $resultadoPago['tiene_pago'] > 0;
+
+            // Si no tiene pago aprobado Y está vencida (fecha de vencimiento pasada), contar como deuda
+            $fechaVencimiento = strtotime($mensualidad['fecha_vencimiento']);
+            $estaVencida = $fechaVencimiento < time();
+
+            if (!$tienePago && $estaVencida) {
+                $totalUsd += $mensualidad['monto_usd'];
+                $totalBs += $mensualidad['monto_bs'];
+                $mesesCount++;
+            }
+        }
 
         return [
-            'total_usd' => (float)$result['total_usd'],
-            'total_bs' => (float)$result['total_bs'],
-            'meses_count' => (int)$result['meses_count'],
+            'total_usd' => (float)$totalUsd,
+            'total_bs' => (float)$totalBs,
+            'meses_count' => (int)$mesesCount,
             // Alias para compatibilidad con vistas
-            'deuda_total_usd' => (float)$result['total_usd'],
-            'total_vencidas' => (int)$result['meses_count']
+            'deuda_total_usd' => (float)$totalUsd,
+            'total_vencidas' => (int)$mesesCount
         ];
     }
 
@@ -427,7 +500,7 @@ class Mensualidad
         $sql = "SELECT m.*,
                        CONCAT(a.bloque, '-', a.numero_apartamento) as apartamento,
                        t.tasa_usd_bs,
-                       p.fecha_pago
+                       MAX(p.fecha_pago) as fecha_pago
                 FROM mensualidades m
                 JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
                 JOIN apartamentos a ON a.id = au.apartamento_id
@@ -435,6 +508,7 @@ class Mensualidad
                 LEFT JOIN pago_mensualidad pm ON pm.mensualidad_id = m.id
                 LEFT JOIN pagos p ON p.id = pm.pago_id AND p.estado_comprobante = 'aprobado'
                 WHERE au.usuario_id = ?
+                GROUP BY m.id
                 ORDER BY m.anio DESC, m.mes DESC";
 
         return Database::fetchAll($sql, [$usuarioId]);
@@ -620,6 +694,129 @@ class Mensualidad
             Database::rollback();
             writeLog("Error generando mensualidades futuras: " . $e->getMessage(), 'error');
             return [];
+        }
+    }
+
+    /**
+     * Generar mensualidades retroactivas para meses pasados sin pago
+     * Se ejecuta cuando un usuario intenta pagar para asegurar que no pueda saltarse meses
+     *
+     * @param int $usuarioId ID del usuario
+     * @return int Número de mensualidades generadas
+     */
+    public static function generarMensualidadesRetroactivas(int $usuarioId): int
+    {
+        try {
+            Database::beginTransaction();
+
+            // Obtener datos del apartamento del usuario
+            $sql = "SELECT au.id, au.cantidad_controles, a.bloque, a.numero_apartamento
+                    FROM apartamento_usuario au
+                    JOIN apartamentos a ON a.id = au.apartamento_id
+                    WHERE au.usuario_id = ? AND au.activo = TRUE
+                    LIMIT 1";
+
+            $apartamentoUsuario = Database::fetchOne($sql, [$usuarioId]);
+
+            if (!$apartamentoUsuario) {
+                throw new Exception("El usuario no tiene un apartamento activo");
+            }
+
+            // Obtener la fecha más antigua de mensualidad existente
+            $sqlFechaMinima = "SELECT MIN(DATE(CONCAT(anio, '-', LPAD(mes, 2, '0'), '-01'))) as fecha_minima
+                              FROM mensualidades m
+                              JOIN apartamento_usuario au ON au.id = m.apartamento_usuario_id
+                              WHERE au.usuario_id = ? AND au.activo = TRUE";
+
+            $resultadoFecha = Database::fetchOne($sqlFechaMinima, [$usuarioId]);
+            $fechaInicio = $resultadoFecha && $resultadoFecha['fecha_minima']
+                         ? $resultadoFecha['fecha_minima']
+                         : date('Y-01-01'); // Inicio del año actual si no hay mensualidades
+
+            // Obtener última tasa BCV
+            $sqlTasa = "SELECT id, tasa_usd_bs FROM tasa_cambio_bcv
+                        ORDER BY fecha_registro DESC LIMIT 1";
+            $tasa = Database::fetchOne($sqlTasa);
+
+            if (!$tasa) {
+                throw new Exception("No hay tasa de cambio BCV registrada");
+            }
+
+            // Obtener tarifa vigente
+            $sqlTarifa = "SELECT monto_mensual_usd FROM configuracion_tarifas
+                          WHERE activo = TRUE
+                          AND fecha_vigencia_inicio <= CURDATE()
+                          ORDER BY fecha_vigencia_inicio DESC LIMIT 1";
+            $tarifa = Database::fetchOne($sqlTarifa);
+
+            if (!$tarifa) {
+                throw new Exception("No hay tarifa configurada");
+            }
+
+            $mensualidadesGeneradas = 0;
+            $mesActual = (int)date('n');
+            $anioActual = (int)date('Y');
+
+            // Generar mensualidades desde la fecha mínima hacia atrás hasta 3 meses atrás del mes actual
+            $fechaActual = strtotime($fechaInicio);
+            $fechaLimite = strtotime('-3 months', strtotime(date('Y-m-01'))); // No generar antes de 3 meses atrás
+
+            while ($fechaActual >= $fechaLimite) {
+                $mes = (int)date('n', $fechaActual);
+                $anio = (int)date('Y', $fechaActual);
+
+                // Verificar si ya existe la mensualidad
+                $sqlExiste = "SELECT id FROM mensualidades
+                             WHERE apartamento_usuario_id = ? AND mes = ? AND anio = ?";
+                $existe = Database::fetchOne($sqlExiste, [$apartamentoUsuario['id'], $mes, $anio]);
+
+                if (!$existe) {
+                    // Calcular monto en Bs
+                    $montoBs = $tarifa['monto_mensual_usd'] * $tasa['tasa_usd_bs'];
+
+                    // Fecha de vencimiento (último día del mes)
+                    $fechaVencimiento = date('Y-m-t', strtotime("$anio-$mes-01"));
+
+                    // Insertar mensualidad
+                    $sqlInsert = "INSERT INTO mensualidades
+                                  (apartamento_usuario_id, mes, anio, cantidad_controles,
+                                   monto_usd, monto_bs, tasa_cambio_id, estado, fecha_vencimiento)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)";
+
+                    $params = [
+                        $apartamentoUsuario['id'],
+                        $mes,
+                        $anio,
+                        $apartamentoUsuario['cantidad_controles'],
+                        $tarifa['monto_mensual_usd'],
+                        $montoBs,
+                        $tasa['id'],
+                        $fechaVencimiento
+                    ];
+
+                    $mensualidadId = Database::execute($sqlInsert, $params);
+
+                    if ($mensualidadId) {
+                        $mensualidadesGeneradas++;
+                    }
+                }
+
+                // Retroceder un mes
+                $fechaActual = strtotime('-1 month', $fechaActual);
+            }
+
+            Database::commit();
+
+            if ($mensualidadesGeneradas > 0) {
+                writeLog("Generadas $mensualidadesGeneradas mensualidades retroactivas para usuario ID: $usuarioId", 'info');
+            }
+
+            return $mensualidadesGeneradas;
+
+        } catch (Exception $e) {
+            Database::rollback();
+            writeLog("Error generando mensualidades retroactivas: " . $e->getMessage(), 'error');
+            return 0;
         }
     }
 }

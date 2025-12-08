@@ -47,15 +47,12 @@ require_once __DIR__ . '/../layouts/header.php';
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Torre</label>
+                        <label class="form-label">Bloque</label>
                         <select name="torre" class="form-select form-select-sm">
                             <option value="">Todas</option>
-                            <option value="27" <?= ($_GET['torre'] ?? '') === '27' ? 'selected' : '' ?>>Torre 27</option>
-                            <option value="28" <?= ($_GET['torre'] ?? '') === '28' ? 'selected' : '' ?>>Torre 28</option>
-                            <option value="29" <?= ($_GET['torre'] ?? '') === '29' ? 'selected' : '' ?>>Torre 29</option>
-                            <option value="30" <?= ($_GET['torre'] ?? '') === '30' ? 'selected' : '' ?>>Torre 30</option>
-                            <option value="31" <?= ($_GET['torre'] ?? '') === '31' ? 'selected' : '' ?>>Torre 31</option>
-                            <option value="32" <?= ($_GET['torre'] ?? '') === '32' ? 'selected' : '' ?>>Torre 32</option>
+                            <?php foreach (($bloques ?? []) as $t): ?>
+                                <option value="<?= $t ?>" <?= ($_GET['torre'] ?? '') == $t ? 'selected' : '' ?>>Bloque <?= $t ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -141,12 +138,12 @@ require_once __DIR__ . '/../layouts/header.php';
                                 <?php foreach ($morosos as $moroso): ?>
                                     <tr>
                                         <td>
-                                            <strong><?= htmlspecialchars($moroso['nombre_completo']) ?></strong><br>
-                                            <small class="text-muted"><?= htmlspecialchars($moroso['cedula']) ?></small>
+                                            <strong><?= htmlspecialchars($moroso['nombre_completo'] ?? '') ?></strong><br>
+                                            <small class="text-muted"><?= htmlspecialchars($moroso['cedula'] ?? '') ?></small>
                                         </td>
                                         <td>
                                             <span class="badge bg-secondary">
-                                                Torre <?= $moroso['torre'] ?> - Apto <?= $moroso['apartamento'] ?>
+                                                Bloque <?= $moroso['torre'] ?> - Apto <?= $moroso['apartamento'] ?>
                                             </span>
                                         </td>
                                         <td>
@@ -180,9 +177,9 @@ require_once __DIR__ . '/../layouts/header.php';
                                         </td>
                                         <td>
                                             <small>
-                                                <i class="bi bi-envelope"></i> <?= htmlspecialchars($moroso['email']) ?><br>
+                                                <i class="bi bi-envelope"></i> <?= htmlspecialchars($moroso['email'] ?? '') ?><br>
                                                 <?php if ($moroso['telefono']): ?>
-                                                    <i class="bi bi-phone"></i> <?= htmlspecialchars($moroso['telefono']) ?>
+                                                    <i class="bi bi-phone"></i> <?= htmlspecialchars($moroso['telefono'] ?? '') ?>
                                                 <?php endif; ?>
                                             </small>
                                         </td>

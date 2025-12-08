@@ -5,6 +5,9 @@ $breadcrumb = [
     ['label' => 'Solicitudes', 'url' => '#']
 ];
 
+// Incluir helper de tipos de solicitud
+require_once __DIR__ . '/../../../helpers/SolicitudHelper.php';
+
 require_once __DIR__ . '/../layouts/header.php';
 ?>
 
@@ -68,18 +71,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                         </td>
                                         <td>
                                             <?php
-                                            $tipos = [
-                                                'desincorporar_control' => ['label' => 'Desincorporar Control', 'icon' => 'dash-circle', 'color' => 'danger'],
-                                                'reportar_perdido' => ['label' => 'Reportar Perdido', 'icon' => 'exclamation-triangle', 'color' => 'warning'],
-                                                'agregar_control' => ['label' => 'Añadir Control', 'icon' => 'plus-circle', 'color' => 'success'],
-                                                'comprar_control' => ['label' => 'Comprar Control', 'icon' => 'cart-plus', 'color' => 'primary'],
-                                                'solicitud_personalizada' => ['label' => 'Solicitud Personalizada', 'icon' => 'chat-dots', 'color' => 'info'],
-                                                'cambio_cantidad_controles' => ['label' => 'Cambio de Cantidad', 'icon' => 'arrow-left-right', 'color' => 'secondary'],
-                                                'suspension_control' => ['label' => 'Suspensión', 'icon' => 'pause-circle', 'color' => 'warning'],
-                                                'desactivacion_control' => ['label' => 'Desactivación', 'icon' => 'x-circle', 'color' => 'dark'],
-                                                'cambio_estado_control' => ['label' => 'Cambio Estado Control', 'icon' => 'arrow-repeat', 'color' => 'secondary']
-                                            ];
-                                            $tipoInfo = $tipos[$solicitud['tipo_solicitud']] ?? ['label' => ucfirst(str_replace('_', ' ', $solicitud['tipo_solicitud'])), 'icon' => 'tag', 'color' => 'secondary'];
+                                            $tipoInfo = SolicitudHelper::getTipoInfo($solicitud['tipo_solicitud']);
                                             ?>
                                             <span class="badge bg-<?= $tipoInfo['color'] ?>">
                                                 <i class="bi bi-<?= $tipoInfo['icon'] ?>"></i> <?= $tipoInfo['label'] ?>
@@ -191,18 +183,7 @@ require_once __DIR__ . '/../layouts/header.php';
                                                             if (empty($tipoSolicitud)) {
                                                                 echo '<span class="text-danger">No especificado</span>';
                                                             } else {
-                                                                $tipos = [
-                                                                    'desincorporar_control' => 'Desincorporar Control',
-                                                                    'reportar_perdido' => 'Reportar Control Perdido',
-                                                                    'agregar_control' => 'Añadir Nuevo Control',
-                                                                    'comprar_control' => 'Comprar Control',
-                                                                    'solicitud_personalizada' => 'Solicitud Personalizada',
-                                                                    'cambio_cantidad_controles' => 'Cambio de Cantidad de Controles',
-                                                                    'suspension_control' => 'Suspensión de Control',
-                                                                    'desactivacion_control' => 'Desactivación de Control',
-                                                                    'cambio_estado_control' => 'Cambio Estado Control'
-                                                                ];
-                                                                echo $tipos[$tipoSolicitud] ?? ucfirst(str_replace('_', ' ', $tipoSolicitud));
+                                                                echo SolicitudHelper::getLabel($tipoSolicitud);
                                                             }
                                                             ?>
                                                         </td>
