@@ -565,7 +565,7 @@ class AuthController
         // Limpiar datos del formulario
         unset($_SESSION['form_data']);
 
-        $_SESSION['success'] = '¡Solicitud de registro enviada exitosamente! Será revisada por un administrador en las próximas 24-48 horas. Te notificaremos por email cuando sea aprobada.';
+        $_SESSION['success'] = '¡Solicitud de registro enviada exitosamente! Una vez aprobada, podrás iniciar sesión con la contraseña temporal <strong>123456</strong> y cambiarla inmediatamente. Te notificaremos por email cuando sea aprobada.';
         redirect('auth/login');
     }
 
@@ -603,20 +603,8 @@ class AuthController
             $errores[] = 'Formato de teléfono inválido (Ej: 04141234567)';
         }
 
-        // Contraseña
-        if (empty($data['password'] ?? '')) {
-            $errores[] = 'La contraseña es obligatoria';
-        } else {
-            $validacion = ValidationHelper::validatePassword($data['password']);
-            if (!$validacion['valid']) {
-                $errores = array_merge($errores, $validacion['errors']);
-            }
-        }
-
-        // Confirmar contraseña
-        if (($data['password'] ?? '') !== ($data['password_confirm'] ?? '')) {
-            $errores[] = 'Las contraseñas no coinciden';
-        }
+        // Nota: Ya no se solicita contraseña en el registro
+        // Se asignará una contraseña temporal automáticamente
 
         // Apartamento
         if (empty($data['bloque'] ?? '')) {
@@ -660,10 +648,14 @@ class AuthController
     {
         require_once __DIR__ . '/../models/SolicitudCambio.php';
 
+        // Asignar contraseña temporal (123456) en lugar de solicitar contraseña al usuario
+        $passwordTemporal = '123456';
+
         $datosUsuario = [
             'nombre_completo' => trim($formData['nombre'] . ' ' . $formData['apellido']),
             'email' => trim($formData['email']),
-            'password' => password_hash($formData['password'], PASSWORD_BCRYPT),
+            'password' => password_hash($passwordTemporal, PASSWORD_BCRYPT),
+            'password_temporal' => true, // Marcar como contraseña temporal
             'telefono' => trim($formData['telefono']),
             'bloque' => $formData['bloque'],
             'escalera' => $formData['escalera'],

@@ -271,36 +271,12 @@
                     <div class="form-text">Ejemplo: 04141234567</div>
                 </div>
 
-                <!-- Contraseña -->
-                <div class="section-title">
-                    <i class="bi bi-lock"></i> Contraseña
-                </div>
-
-                <div class="form-floating" style="position: relative;">
-                    <input type="password"
-                           class="form-control"
-                           id="password"
-                           name="password"
-                           placeholder="Contraseña"
-                           required>
-                    <label for="password">Contraseña *</label>
-                    <span class="password-toggle" onclick="togglePassword('password', 'toggleIcon1')">
-                        <i class="bi bi-eye" id="toggleIcon1"></i>
-                    </span>
-                    <div class="form-text">Mínimo 8 caracteres, incluir mayúsculas, minúsculas y números</div>
-                </div>
-
-                <div class="form-floating" style="position: relative;">
-                    <input type="password"
-                           class="form-control"
-                           id="password_confirm"
-                           name="password_confirm"
-                           placeholder="Confirmar Contraseña"
-                           required>
-                    <label for="password_confirm">Confirmar Contraseña *</label>
-                    <span class="password-toggle" onclick="togglePassword('password_confirm', 'toggleIcon2')">
-                        <i class="bi bi-eye" id="toggleIcon2"></i>
-                    </span>
+                <!-- Información Importante sobre Contraseña -->
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Nota sobre contraseña:</strong> No es necesario crear una contraseña ahora.
+                    Una vez que su solicitud sea aprobada, podrá iniciar sesión con la contraseña temporal
+                    <strong>123456</strong> y cambiarla inmediatamente por una de su preferencia.
                 </div>
 
                 <!-- Información del Apartamento -->

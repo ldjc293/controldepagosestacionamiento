@@ -323,12 +323,12 @@ class SolicitudCambio
             $usuarioId = Usuario::create([
                 'nombre_completo' => $datos['nombre_completo'],
                 'email' => $datos['email'],
-                'password' => $datos['password'], // Ya viene hasheado
+                'password' => $datos['password'], // Ya viene hasheado (contraseña temporal)
                 'telefono' => $datos['telefono'] ?? null,
                 'rol' => 'cliente',
                 'activo' => true,
                 'primer_acceso' => true,
-                'password_temporal' => false, // El usuario eligió su propia contraseña
+                'password_temporal' => true, // IMPORTANTE: Es contraseña temporal (123456)
                 'perfil_completo' => true,
                 'is_hashed' => true // IMPORTANTE: Evitar doble hash
             ]);
@@ -410,12 +410,12 @@ class SolicitudCambio
             $usuarioId = Usuario::create([
                 'nombre_completo' => $datosOriginales['nombre_completo'],
                 'email' => $datosOriginales['email'],
-                'password' => $datosOriginales['password'], // Ya viene hasheado
+                'password' => $datosOriginales['password'], // Ya viene hasheado (contraseña temporal)
                 'telefono' => $datosOriginales['telefono'] ?? null,
                 'rol' => 'cliente',
                 'activo' => true,
                 'primer_acceso' => true,
-                'password_temporal' => false, // El usuario eligió su propia contraseña
+                'password_temporal' => true, // IMPORTANTE: Es contraseña temporal (123456)
                 'perfil_completo' => true,
                 'is_hashed' => true // IMPORTANTE: Evitar doble hash
             ]);
